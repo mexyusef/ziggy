@@ -109,11 +109,14 @@ pub fn Program(comptime Model: type, comptime Msg: type) type {
                     const result = self.input_dispatcher.dispatchKey(key);
                     blocked = result.default_prevented or result.propagation_stopped;
                 },
+                .mouse => |mouse| {
+                    const result = self.input_dispatcher.dispatchMouse(mouse);
+                    blocked = result.default_prevented or result.propagation_stopped;
+                },
                 .paste => |text| {
                     const result = self.input_dispatcher.dispatchPaste(text);
                     blocked = result.default_prevented or result.propagation_stopped;
                 },
-                else => {},
             }
             if (Msg == parser.Event) {
                 const keep_running = if (!blocked) try self.processEvent(event) else true;

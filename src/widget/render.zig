@@ -172,7 +172,7 @@ fn renderTransformText(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: no
 
 fn renderVStack(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.Node.VStackData) void {
     if (data.children.len == 0) return;
-    const gap_total: u16 = if (data.children.len <= 1) 0 else @intCast((data.children.len - 1) * data.gap);
+    const gap_total: u16 = if (data.children.len <= 1) 0 else @intCast(@min((data.children.len - 1) * data.gap, std.math.maxInt(u16)));
     const usable_height: u16 = rect.height -| gap_total;
     const total_weight = sumWeights(data.weights, data.children.len);
     var y = rect.y;
@@ -180,12 +180,12 @@ fn renderVStack(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.
     for (data.children, 0..) |child, index| {
         const h: u16 = if (index + 1 == data.children.len)
             usable_height -| used_height
-        else if (data.weights) |weights|
-            @intCast((@as(usize, usable_height) * weights[index]) / total_weight)
+        else if (data.weights) |_|
+            @intCast((@as(usize, usable_height) * childWeight(data.weights, index)) / total_weight)
         else
             @intCast(@as(usize, usable_height) / data.children.len);
         renderNode(screen, .{ .x = rect.x, .y = y, .width = rect.width, .height = h }, child);
-        y += h + data.gap;
+        y +|= h +| data.gap;
         used_height += h;
         if (y >= rect.y + rect.height) break;
     }
@@ -193,7 +193,7 @@ fn renderVStack(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.
 
 fn renderHStack(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.Node.HStackData) void {
     if (data.children.len == 0) return;
-    const gap_total: u16 = if (data.children.len <= 1) 0 else @intCast((data.children.len - 1) * data.gap);
+    const gap_total: u16 = if (data.children.len <= 1) 0 else @intCast(@min((data.children.len - 1) * data.gap, std.math.maxInt(u16)));
     const usable_width: u16 = rect.width -| gap_total;
     const total_weight = sumWeights(data.weights, data.children.len);
     var x = rect.x;
@@ -201,12 +201,12 @@ fn renderHStack(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.
     for (data.children, 0..) |child, index| {
         const w: u16 = if (index + 1 == data.children.len)
             usable_width -| used_width
-        else if (data.weights) |weights|
-            @intCast((@as(usize, usable_width) * weights[index]) / total_weight)
+        else if (data.weights) |_|
+            @intCast((@as(usize, usable_width) * childWeight(data.weights, index)) / total_weight)
         else
             @intCast(@as(usize, usable_width) / data.children.len);
         renderNode(screen, .{ .x = x, .y = rect.y, .width = w, .height = rect.height }, child);
-        x += w + data.gap;
+        x +|= w +| data.gap;
         used_width += w;
         if (x >= rect.x + rect.width) break;
     }

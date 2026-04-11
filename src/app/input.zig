@@ -31,10 +31,25 @@ pub const PasteEvent = struct {
     }
 };
 
+pub const MouseEvent = struct {
+    mouse: parser.Mouse,
+    default_prevented: bool = false,
+    propagation_stopped: bool = false,
+
+    pub fn preventDefault(self: *MouseEvent) void {
+        self.default_prevented = true;
+    }
+
+    pub fn stopPropagation(self: *MouseEvent) void {
+        self.propagation_stopped = true;
+    }
+};
+
 pub const Handler = struct {
     ctx: ?*anyopaque = null,
     on_key: ?*const fn (?*anyopaque, *KeyEvent) void = null,
     on_paste: ?*const fn (?*anyopaque, *PasteEvent) void = null,
+    on_mouse: ?*const fn (?*anyopaque, *MouseEvent) void = null,
 };
 
 pub const DispatchResult = struct {
@@ -90,6 +105,17 @@ pub const Dispatcher = struct {
             .propagation_stopped = event.propagation_stopped,
         };
     }
+
+    pub fn dispatchMouse(self: *Dispatcher, mouse: parser.Mouse) DispatchResult {
+        var event: MouseEvent = .{ .mouse = mouse };
+        const handled = dispatchMouseHandlers(self.global_handlers.items, &event) or
+            dispatchMouseHandlers(self.local_handlers.items, &event);
+        return .{
+            .handled = handled,
+            .default_prevented = event.default_prevented,
+            .propagation_stopped = event.propagation_stopped,
+        };
+    }
 };
 
 fn dispatchToHandlers(handlers: []const Handler, event: *KeyEvent) bool {
@@ -110,6 +136,18 @@ fn dispatchPasteHandlers(handlers: []const Handler, event: *PasteEvent) bool {
         if (handler.on_paste) |on_paste| {
             handled = true;
             on_paste(handler.ctx, event);
+            if (event.propagation_stopped) break;
+        }
+    }
+    return handled;
+}
+
+fn dispatchMouseHandlers(handlers: []const Handler, event: *MouseEvent) bool {
+    var handled = false;
+    for (handlers) |handler| {
+        if (handler.on_mouse) |on_mouse| {
+            handled = true;
+            on_mouse(handler.ctx, event);
             if (event.propagation_stopped) break;
         }
     }
@@ -173,4 +211,30 @@ test "dispatcher routes paste handlers" {
     const result = dispatcher.dispatchPaste("hello");
     try std.testing.expect(result.handled);
     try std.testing.expect(state.seen);
+}
+
+test "dispatcher routes mouse handlers" {
+    const State = struct {
+        clicks: usize = 0,
+    };
+
+    const mouseHandler = struct {
+        fn call(ctx: ?*anyopaque, event: *MouseEvent) void {
+            const state: *State = @ptrCast(@alignCast(ctx.?));
+            if (event.mouse.button == .left and event.mouse.pressed) {
+                state.clicks += 1;
+                event.stopPropagation();
+            }
+        }
+    }.call;
+
+    var state: State = .{};
+    var dispatcher = Dispatcher.init(std.testing.allocator);
+    defer dispatcher.deinit();
+    try dispatcher.addGlobal(.{ .ctx = &state, .on_mouse = mouseHandler });
+
+    const result = dispatcher.dispatchMouse(.{ .button = .left, .x = 1, .y = 1, .pressed = true });
+    try std.testing.expect(result.handled);
+    try std.testing.expect(result.propagation_stopped);
+    try std.testing.expectEqual(@as(usize, 1), state.clicks);
 }

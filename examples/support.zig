@@ -39,14 +39,28 @@ extern "kernel32" fn WaitForSingleObject(
 
 pub fn detectTerminalSize() ziggy.Size {
     if (@import("builtin").os.tag == .windows) {
-        var info: CONSOLE_SCREEN_BUFFER_INFO = undefined;
-        if (GetConsoleScreenBufferInfo(std.fs.File.stdout().handle, &info) != 0) {
-            const width = @as(u16, @intCast(@max(@as(i32, 1), @as(i32, info.srWindow.Right) - @as(i32, info.srWindow.Left) + 1)));
-            const height = @as(u16, @intCast(@max(@as(i32, 1), @as(i32, info.srWindow.Bottom) - @as(i32, info.srWindow.Top) + 1)));
-            return .{ .width = width, .height = height };
+        if (queryConsoleSize(std.fs.File.stdout().handle)) |size| {
+            return size;
+        }
+        if (std.fs.cwd().openFile("CONOUT$", .{ .mode = .read_write })) |conout| {
+            defer conout.close();
+            if (queryConsoleSize(conout.handle)) |size| {
+                return size;
+            }
+        } else |_| {}
+        if (queryConsoleSize(std.fs.File.stderr().handle)) |size| {
+            return size;
         }
     }
     return .{ .width = 100, .height = 30 };
+}
+
+fn queryConsoleSize(handle: HANDLE) ?ziggy.Size {
+    var info: CONSOLE_SCREEN_BUFFER_INFO = undefined;
+    if (GetConsoleScreenBufferInfo(handle, &info) == 0) return null;
+    const width = @as(u16, @intCast(@max(@as(i32, 1), @as(i32, info.srWindow.Right) - @as(i32, info.srWindow.Left) + 1)));
+    const height = @as(u16, @intCast(@max(@as(i32, 1), @as(i32, info.srWindow.Bottom) - @as(i32, info.srWindow.Top) + 1)));
+    return .{ .width = width, .height = height };
 }
 
 pub fn dumpScreen(writer: anytype, screen: *const ziggy.Screen) !void {

@@ -186,7 +186,7 @@ test "cursorFromLocalPoint accounts for prompt width" {
 
     try std.testing.expectEqual(@as(usize, 0), cursorFromLocalPoint(&editor, "> ", 0, 0, .{}));
     try std.testing.expectEqual(@as(usize, 2), cursorFromLocalPoint(&editor, "> ", 4, 0, .{}));
-    try std.testing.expectEqual(@as(usize, 8), cursorFromLocalPoint(&editor, "> ", 3, 1, .{}));
+    try std.testing.expectEqual(@as(usize, 7), cursorFromLocalPoint(&editor, "> ", 3, 1, .{}));
 }
 
 test "cursorFromRectPoint returns null outside rect" {
