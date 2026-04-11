@@ -27,8 +27,12 @@ pub const Context = struct {
     }
 
     pub fn openOverlay(self: *Context, id: []const u8, title: ?[]const u8, kind: overlay_mod.Kind) !void {
+        try self.openAnchoredOverlay(id, title, kind, null);
+    }
+
+    pub fn openAnchoredOverlay(self: *Context, id: []const u8, title: ?[]const u8, kind: overlay_mod.Kind, anchor: ?@import("../widget/surface.zig").Rect) !void {
         if (self.overlays) |overlays| {
-            try overlays.push(id, title, kind, null);
+            try overlays.pushOrUpdate(id, title, kind, anchor);
             self.requestRedraw();
         }
     }
@@ -37,5 +41,9 @@ pub const Context = struct {
         if (self.overlays) |overlays| {
             if (overlays.pop(id)) self.requestRedraw();
         }
+    }
+
+    pub fn hasBlockingOverlay(self: *const Context) bool {
+        return if (self.overlays) |overlays| overlays.hasBlockingOverlay() else false;
     }
 };

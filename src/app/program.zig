@@ -49,6 +49,8 @@ pub fn Program(comptime Model: type, comptime Msg: type) type {
                     .title = null,
                     .tab_status = options.tab_status,
                     .overlay_count = 0,
+                    .anchored_overlay_count = 0,
+                    .top_overlay = null,
                     .blocking_overlay = null,
                 },
                 .input_dispatcher = input_mod.Dispatcher.init(allocator),
@@ -166,7 +168,9 @@ pub fn Program(comptime Model: type, comptime Msg: type) type {
 
         fn makeContext(self: *Self) context_mod.Context {
             self.root.overlay_count = self.overlays.entries.items.len;
-            self.root.blocking_overlay = if (self.overlays.topModal()) |entry| entry.kind else null;
+            self.root.anchored_overlay_count = self.overlays.anchoredCount();
+            self.root.top_overlay = if (self.overlays.top()) |entry| entry.kind else null;
+            self.root.blocking_overlay = if (self.overlays.topBlocking()) |entry| entry.kind else null;
             return .{
                 .allocator = self.frame_arena.allocator(),
                 .persistent_allocator = self.allocator,

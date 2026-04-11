@@ -3,6 +3,7 @@ const parser = @import("../terminal/parser.zig");
 const box = @import("box.zig");
 const text = @import("text.zig");
 const vstack = @import("vstack.zig");
+const selection_model = @import("selection_model.zig");
 const style_mod = @import("../style/style.zig");
 const border_mod = @import("../style/border.zig");
 const node_mod = @import("node.zig");
@@ -21,24 +22,25 @@ pub const State = struct {
 
 pub fn handleKey(state: *State, items: []const Item, key: parser.Key) void {
     if (!state.focused or items.len == 0) return;
+    state.cursor = selection_model.clampIndex(state.cursor, items.len);
     if (!state.expanded) {
         switch (key) {
-            .enter, .down, .tab => state.expanded = true,
+            .enter, .down, .tab => {
+                state.expanded = true;
+                if (selection_model.firstEnabled(Item, items)) |index| {
+                    state.cursor = if (state.selected) |selected| selection_model.clampIndex(selected, items.len) else index;
+                }
+            },
             else => {},
         }
         return;
     }
     switch (key) {
-        .up => {
-            if (state.cursor > 0) state.cursor -= 1;
-        },
-        .down => {
-            if (state.cursor + 1 < items.len) state.cursor += 1;
-        },
+        .up => selection_model.moveEnabled(Item, &state.cursor, items, .previous, false),
+        .down => selection_model.moveEnabled(Item, &state.cursor, items, .next, false),
         .escape => state.expanded = false,
         .enter, .tab => {
-            if (items[state.cursor].enabled) state.selected = state.cursor;
-            state.expanded = false;
+            if (selection_model.activateEnabled(Item, &state.selected, state.cursor, items)) state.expanded = false;
         },
         else => {},
     }
@@ -95,4 +97,12 @@ test "dropdown chooses item" {
     handleKey(&state, &items, .down);
     handleKey(&state, &items, .enter);
     try std.testing.expectEqual(@as(?usize, 1), state.selected);
+}
+
+test "dropdown skips disabled options" {
+    const items = [_]Item{ .{ .label = "A" }, .{ .label = "B", .enabled = false }, .{ .label = "C" } };
+    var state: State = .{};
+    handleKey(&state, &items, .enter);
+    handleKey(&state, &items, .down);
+    try std.testing.expectEqual(@as(usize, 2), state.cursor);
 }

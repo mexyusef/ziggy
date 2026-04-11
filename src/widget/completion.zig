@@ -1,5 +1,6 @@
 const std = @import("std");
 const editor_mod = @import("editor.zig");
+const selection_model = @import("selection_model.zig");
 
 pub const Item = struct {
     label: []const u8,
@@ -35,16 +36,12 @@ pub const State = struct {
 
     pub fn selectNext(self: *State) void {
         if (!self.visible or self.matches.len == 0) return;
-        self.selected = (self.selected + 1) % self.matches.len;
+        selection_model.move(&self.selected, self.matches.len, .next, true);
     }
 
     pub fn selectPrevious(self: *State) void {
         if (!self.visible or self.matches.len == 0) return;
-        if (self.selected == 0) {
-            self.selected = self.matches.len - 1;
-        } else {
-            self.selected -= 1;
-        }
+        selection_model.move(&self.selected, self.matches.len, .previous, true);
     }
 
     pub fn applyCurrent(self: *State, allocator: std.mem.Allocator, editor: *editor_mod.Editor) !bool {

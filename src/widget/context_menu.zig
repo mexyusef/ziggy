@@ -3,6 +3,7 @@ const parser = @import("../terminal/parser.zig");
 const box = @import("box.zig");
 const text = @import("text.zig");
 const vstack = @import("vstack.zig");
+const selection_model = @import("selection_model.zig");
 const style_mod = @import("../style/style.zig");
 const border_mod = @import("../style/border.zig");
 const node_mod = @import("node.zig");
@@ -21,6 +22,7 @@ pub const State = struct {
     pub fn show(self: *State) void {
         self.visible = true;
         self.selected = null;
+        self.cursor = 0;
     }
 
     pub fn hide(self: *State) void {
@@ -30,17 +32,13 @@ pub const State = struct {
 
 pub fn handleKey(state: *State, items: []const Item, key: parser.Key) void {
     if (!state.visible or items.len == 0) return;
+    state.cursor = selection_model.clampIndex(state.cursor, items.len);
     switch (key) {
-        .up => {
-            if (state.cursor > 0) state.cursor -= 1;
-        },
-        .down => {
-            if (state.cursor + 1 < items.len) state.cursor += 1;
-        },
+        .up => selection_model.moveEnabled(Item, &state.cursor, items, .previous, false),
+        .down => selection_model.moveEnabled(Item, &state.cursor, items, .next, false),
         .escape => state.visible = false,
         .enter => {
-            if (items[state.cursor].enabled) {
-                state.selected = state.cursor;
+            if (selection_model.activateEnabled(Item, &state.selected, state.cursor, items)) {
                 state.visible = false;
             }
         },
@@ -85,4 +83,11 @@ test "context menu selects current item" {
     handleKey(&state, &items, .down);
     handleKey(&state, &items, .enter);
     try std.testing.expectEqual(@as(?usize, 1), state.selected);
+}
+
+test "context menu skips disabled items" {
+    const items = [_]Item{ .{ .label = "Open", .enabled = true }, .{ .label = "Delete", .enabled = false }, .{ .label = "Rename", .enabled = true } };
+    var state: State = .{ .visible = true };
+    handleKey(&state, &items, .down);
+    try std.testing.expectEqual(@as(usize, 2), state.cursor);
 }

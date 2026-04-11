@@ -111,6 +111,7 @@ pub const VirtualList = @import("widget/virtual_list.zig");
 pub const Table = @import("widget/table.zig");
 pub const Tree = @import("widget/tree.zig");
 pub const List = @import("widget/list.zig");
+pub const SelectionModel = @import("widget/selection_model.zig");
 pub const ScrollView = @import("widget/scroll.zig");
 pub const Document = @import("widget/document.zig");
 pub const RichDocument = @import("widget/rich_document.zig");
@@ -213,5 +214,6 @@ test {
     _ = @import("widget/virtual_list.zig");
     _ = @import("widget/table.zig");
     _ = @import("widget/tree.zig");
+    _ = @import("widget/selection_model.zig");
     _ = @import("widget/viewport.zig");
 }

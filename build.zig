@@ -83,6 +83,17 @@ pub fn build(b: *std.Build) void {
     controls_demo.root_module.addImport("ziggy", mod);
     b.installArtifact(controls_demo);
 
+    const editor_demo = b.addExecutable(.{
+        .name = "ziggy-editor-demo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/editor_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    editor_demo.root_module.addImport("ziggy", mod);
+    b.installArtifact(editor_demo);
+
     const tests = b.addTest(.{
         .root_module = mod,
     });
@@ -114,4 +125,8 @@ pub fn build(b: *std.Build) void {
     const run_controls_demo = b.addRunArtifact(controls_demo);
     const controls_demo_step = b.step("example-controls", "Run the controls and form demo");
     controls_demo_step.dependOn(&run_controls_demo.step);
+
+    const run_editor_demo = b.addRunArtifact(editor_demo);
+    const editor_demo_step = b.step("example-editor", "Run the editor workspace demo");
+    editor_demo_step.dependOn(&run_editor_demo.step);
 }

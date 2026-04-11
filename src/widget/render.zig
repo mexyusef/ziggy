@@ -104,7 +104,7 @@ fn renderText(
             var parts = std.mem.splitScalar(u8, text, '\n');
             const first_line = parts.first();
             renderTruncatedLine(screen, .{ .x = rect.x, .y = rect.y }, rect.width, first_line, style, wrap_mode, alignment);
-        }
+        },
     }
 }
 
@@ -251,7 +251,7 @@ fn renderSplit(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.N
                     .height = bottom_height,
                 }, data.right);
             }
-        }
+        },
     }
 }
 
@@ -262,11 +262,20 @@ fn renderStatusBar(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_m
         screen.setCell(.{ .x = x, .y = rect.y }, ' ', data.style);
     }
     const width: usize = @intCast(rect.width);
-    screen.writeText(.{ .x = rect.x, .y = rect.y }, data.left[0..@min(data.left.len, width)], data.style);
+    const left_style = data.left_style orelse data.style;
+    const center_style = data.center_style orelse data.style;
+    const right_style = data.right_style orelse data.style;
+
+    screen.writeText(.{ .x = rect.x, .y = rect.y }, data.left[0..@min(data.left.len, width)], left_style);
+    if (data.center) |center| {
+        const center_len: usize = @min(center.len, width);
+        const start_x = rect.x + @as(u16, @intCast((width - center_len) / 2));
+        screen.writeText(.{ .x = start_x, .y = rect.y }, center[0..center_len], center_style);
+    }
     const right_len: usize = @min(data.right.len, width);
     if (right_len < rect.width) {
         const start_x: u16 = rect.x + rect.width - @as(u16, @intCast(right_len));
-        screen.writeText(.{ .x = start_x, .y = rect.y }, data.right[data.right.len - right_len ..], data.style);
+        screen.writeText(.{ .x = start_x, .y = rect.y }, data.right[data.right.len - right_len ..], right_style);
     }
 }
 
@@ -880,6 +889,17 @@ test "render status bar keeps right-aligned content" {
     renderNode(&screen, .{ .x = 0, .y = 0, .width = 10, .height = 1 }, root);
     try std.testing.expectEqual(@as(u8, 'l'), screen.getCell(.{ .x = 0, .y = 0 }).byte);
     try std.testing.expectEqual(@as(u8, 'R'), screen.getCell(.{ .x = 9, .y = 0 }).byte);
+}
+
+test "render status bar centers middle content" {
+    var screen = try screen_mod.Screen.init(std.testing.allocator, .{ .width = 20, .height = 2 });
+    defer screen.deinit();
+    const root = try node_mod.allocNode(std.testing.allocator, .{
+        .status_bar = .{ .left = "L", .center = "MID", .right = "R", .style = .{} },
+    });
+    defer std.testing.allocator.destroy(root);
+    renderNode(&screen, .{ .x = 0, .y = 0, .width = 11, .height = 1 }, root);
+    try std.testing.expectEqual(@as(u8, 'M'), screen.getCell(.{ .x = 4, .y = 0 }).byte);
 }
 
 test "render rich scroll uses span styles" {

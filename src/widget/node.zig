@@ -164,7 +164,11 @@ pub const Node = union(enum) {
     pub const StatusBarData = struct {
         left: []const u8,
         right: []const u8,
+        center: ?[]const u8 = null,
         style: style_mod.Style = .{},
+        left_style: ?style_mod.Style = null,
+        center_style: ?style_mod.Style = null,
+        right_style: ?style_mod.Style = null,
     };
 
     pub const InputData = struct {

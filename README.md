@@ -37,6 +37,7 @@ zig build example-widgets
 zig build example-interactive
 zig build example-full
 zig build example-controls
+zig build example-editor
 ```
 
 ## Run Examples
@@ -46,9 +47,11 @@ python .\scripts\run_examples.py --list
 python .\scripts\run_examples.py
 python .\scripts\run_examples.py interactive
 python .\scripts\run_examples.py controls --build
+python .\scripts\run_examples.py editor
+python .\scripts\run_examples.py editor --new-window
 ```
 
-`example-interactive` should be run inside a real terminal window rather than piped stdin.
+`example-interactive` and `example-editor` should be run inside a real terminal window rather than piped stdin.
 
 ## Use As A Local Dependency
 

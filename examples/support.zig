@@ -5,6 +5,8 @@ const DWORD = std.os.windows.DWORD;
 const HANDLE = std.os.windows.HANDLE;
 const SHORT = std.os.windows.SHORT;
 const BOOL = std.os.windows.BOOL;
+const WAIT_OBJECT_0: DWORD = 0;
+const WAIT_TIMEOUT: DWORD = 258;
 
 const COORD = extern struct {
     X: SHORT,
@@ -30,6 +32,10 @@ extern "kernel32" fn GetConsoleScreenBufferInfo(
     hConsoleOutput: HANDLE,
     lpConsoleScreenBufferInfo: *CONSOLE_SCREEN_BUFFER_INFO,
 ) callconv(.winapi) BOOL;
+extern "kernel32" fn WaitForSingleObject(
+    hHandle: HANDLE,
+    dwMilliseconds: DWORD,
+) callconv(.winapi) DWORD;
 
 pub fn detectTerminalSize() ziggy.Size {
     if (@import("builtin").os.tag == .windows) {
@@ -120,7 +126,23 @@ pub fn runInteractiveProgram(
     try program.start();
     defer program.tty.leaveRawMode();
 
+    var last_size = size;
     while (true) {
+        if (@import("builtin").os.tag == .windows) {
+            const wait_result = WaitForSingleObject(stdin_file.handle, 50);
+            const current_size = detectTerminalSize();
+            if (current_size.width != last_size.width or current_size.height != last_size.height) {
+                last_size = current_size;
+                const keep_running = try program.processTerminalEvent(.{ .resize = .{
+                    .width = current_size.width,
+                    .height = current_size.height,
+                } });
+                if (!keep_running) break;
+            }
+            if (wait_result == WAIT_TIMEOUT) continue;
+            if (wait_result != WAIT_OBJECT_0) break;
+        }
+
         const maybe_event = try readEvent(allocator, stdin_file);
         if (maybe_event == null) break;
         const keep_running = try program.processTerminalEvent(maybe_event.?);

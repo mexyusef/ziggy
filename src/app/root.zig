@@ -15,6 +15,8 @@ pub const RootState = struct {
     title: ?[]const u8 = null,
     tab_status: ?TabStatusKind = null,
     overlay_count: usize = 0,
+    anchored_overlay_count: usize = 0,
+    top_overlay: ?overlay_mod.Kind = null,
     blocking_overlay: ?overlay_mod.Kind = null,
 };
 

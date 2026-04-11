@@ -34,6 +34,8 @@ pub const State = struct {
             .char => |c| try self.editor.insertChar(allocator, c),
             .backspace => try self.editor.backspace(allocator),
             .delete => try self.editor.deleteForward(allocator),
+            .shift_left => self.editor.selectLeft(),
+            .shift_right => self.editor.selectRight(),
             .left => self.editor.moveLeft(),
             .right => self.editor.moveRight(),
             .word_left => self.editor.moveWordLeft(),
@@ -47,6 +49,7 @@ pub const State = struct {
             .tab => {
                 if (self.completion_state.visible) {
                     _ = try self.completion_state.applyCurrent(allocator, &self.editor);
+                    self.completion_state.visible = false;
                 }
             },
             .up, .ctrl_p => self.completion_state.selectPrevious(),
@@ -70,4 +73,12 @@ test "text input reacts to editing keys" {
     try state.handleKey(std.testing.allocator, .{ .char = 'a' });
     try state.handleKey(std.testing.allocator, .{ .char = 'b' });
     try std.testing.expectEqualStrings("ab", state.editor.value);
+}
+
+test "text input supports shift selection" {
+    var state = try State.init(std.testing.allocator, "abc");
+    defer state.deinit(std.testing.allocator);
+    state.editor.moveEnd();
+    try state.handleKey(std.testing.allocator, .shift_left);
+    try std.testing.expect(state.editor.hasSelection());
 }

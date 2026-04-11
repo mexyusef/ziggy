@@ -38,6 +38,7 @@ pub const Editor = struct {
     }
 
     pub fn insertChar(self: *Editor, allocator: std.mem.Allocator, byte: u8) !void {
+        _ = try self.deleteSelection(allocator);
         var buf = try allocator.alloc(u8, self.value.len + 1);
         @memcpy(buf[0..self.cursor], self.value[0..self.cursor]);
         buf[self.cursor] = byte;
@@ -50,6 +51,7 @@ pub const Editor = struct {
 
     pub fn insertText(self: *Editor, allocator: std.mem.Allocator, text: []const u8) !void {
         if (text.len == 0) return;
+        _ = try self.deleteSelection(allocator);
         var buf = try allocator.alloc(u8, self.value.len + text.len);
         @memcpy(buf[0..self.cursor], self.value[0..self.cursor]);
         @memcpy(buf[self.cursor .. self.cursor + text.len], text);
@@ -65,6 +67,7 @@ pub const Editor = struct {
     }
 
     pub fn backspace(self: *Editor, allocator: std.mem.Allocator) !void {
+        if (try self.deleteSelection(allocator)) return;
         if (self.cursor == 0) return;
         var buf = try allocator.alloc(u8, self.value.len - 1);
         @memcpy(buf[0 .. self.cursor - 1], self.value[0 .. self.cursor - 1]);
@@ -76,6 +79,7 @@ pub const Editor = struct {
     }
 
     pub fn deleteForward(self: *Editor, allocator: std.mem.Allocator) !void {
+        if (try self.deleteSelection(allocator)) return;
         if (self.cursor >= self.value.len) return;
         var buf = try allocator.alloc(u8, self.value.len - 1);
         @memcpy(buf[0..self.cursor], self.value[0..self.cursor]);
@@ -86,30 +90,108 @@ pub const Editor = struct {
     }
 
     pub fn moveLeft(self: *Editor) void {
+        if (self.selectedRange()) |range| {
+            self.cursor = range.start;
+            self.selection_anchor = null;
+            return;
+        }
         if (self.cursor > 0) self.cursor -= 1;
     }
 
     pub fn moveRight(self: *Editor) void {
+        if (self.selectedRange()) |range| {
+            self.cursor = range.end;
+            self.selection_anchor = null;
+            return;
+        }
         if (self.cursor < self.value.len) self.cursor += 1;
     }
 
     pub fn moveHome(self: *Editor) void {
+        if (self.selectedRange()) |range| {
+            self.cursor = range.start;
+            self.selection_anchor = null;
+            return;
+        }
         self.cursor = 0;
     }
 
     pub fn moveEnd(self: *Editor) void {
+        if (self.selectedRange()) |range| {
+            self.cursor = range.end;
+            self.selection_anchor = null;
+            return;
+        }
         self.cursor = self.value.len;
     }
 
     pub fn moveWordLeft(self: *Editor) void {
+        if (self.selectedRange()) |range| {
+            self.cursor = range.start;
+            self.selection_anchor = null;
+            return;
+        }
         if (self.cursor == 0) return;
         while (self.cursor > 0 and std.ascii.isWhitespace(self.value[self.cursor - 1])) self.cursor -= 1;
         while (self.cursor > 0 and !std.ascii.isWhitespace(self.value[self.cursor - 1])) self.cursor -= 1;
     }
 
     pub fn moveWordRight(self: *Editor) void {
+        if (self.selectedRange()) |range| {
+            self.cursor = range.end;
+            self.selection_anchor = null;
+            return;
+        }
         while (self.cursor < self.value.len and !std.ascii.isWhitespace(self.value[self.cursor])) self.cursor += 1;
         while (self.cursor < self.value.len and std.ascii.isWhitespace(self.value[self.cursor])) self.cursor += 1;
+    }
+
+    pub fn moveLineHome(self: *Editor) void {
+        self.cursor = lineStartForIndex(self.value, self.currentLine());
+        self.selection_anchor = null;
+    }
+
+    pub fn moveLineEnd(self: *Editor) void {
+        self.cursor = lineEndForIndex(self.value, self.currentLine());
+        self.selection_anchor = null;
+    }
+
+    pub fn moveUp(self: *Editor) void {
+        const line = self.currentLine();
+        if (line == 0) {
+            self.moveLineHome();
+            return;
+        }
+        const column = self.currentColumn();
+        self.cursor = self.cursorFromLineColumn(line - 1, column);
+        self.selection_anchor = null;
+    }
+
+    pub fn moveDown(self: *Editor) void {
+        const line = self.currentLine();
+        if (line + 1 >= self.lineCount()) {
+            self.moveLineEnd();
+            return;
+        }
+        const column = self.currentColumn();
+        self.cursor = self.cursorFromLineColumn(line + 1, column);
+        self.selection_anchor = null;
+    }
+
+    pub fn pageUp(self: *Editor, line_count: usize) void {
+        if (line_count == 0) return;
+        const line = self.currentLine();
+        const column = self.currentColumn();
+        self.cursor = self.cursorFromLineColumn(line -| line_count, column);
+        self.selection_anchor = null;
+    }
+
+    pub fn pageDown(self: *Editor, line_count: usize) void {
+        if (line_count == 0) return;
+        const line = self.currentLine();
+        const column = self.currentColumn();
+        self.cursor = self.cursorFromLineColumn(@min(line + line_count, self.lineCount() - 1), column);
+        self.selection_anchor = null;
     }
 
     pub fn deleteToStart(self: *Editor, allocator: std.mem.Allocator) !void {
@@ -172,6 +254,26 @@ pub const Editor = struct {
         self.cursor += 1;
     }
 
+    pub fn selectUp(self: *Editor) void {
+        if (self.selection_anchor == null) self.selection_anchor = self.cursor;
+        const line = self.currentLine();
+        if (line == 0) {
+            self.cursor = 0;
+            return;
+        }
+        self.cursor = self.cursorFromLineColumn(line - 1, self.currentColumn());
+    }
+
+    pub fn selectDown(self: *Editor) void {
+        if (self.selection_anchor == null) self.selection_anchor = self.cursor;
+        const line = self.currentLine();
+        if (line + 1 >= self.lineCount()) {
+            self.cursor = self.value.len;
+            return;
+        }
+        self.cursor = self.cursorFromLineColumn(line + 1, self.currentColumn());
+    }
+
     pub fn selectedRange(self: *const Editor) ?struct { start: usize, end: usize } {
         if (self.selection_anchor == null or self.selection_anchor.? == self.cursor) return null;
         return .{
@@ -183,6 +285,21 @@ pub const Editor = struct {
     pub fn setCursor(self: *Editor, cursor: usize) void {
         self.cursor = @min(cursor, self.value.len);
         self.selection_anchor = null;
+    }
+
+    pub fn hasSelection(self: *const Editor) bool {
+        return self.selectedRange() != null;
+    }
+
+    pub fn selectedText(self: *const Editor) ?[]const u8 {
+        const range = self.selectedRange() orelse return null;
+        return self.value[range.start..range.end];
+    }
+
+    pub fn deleteSelection(self: *Editor, allocator: std.mem.Allocator) !bool {
+        const range = self.selectedRange() orelse return false;
+        try self.replaceRange(allocator, range.start, range.end, "");
+        return true;
     }
 
     pub fn tokenRangeAtCursor(self: *const Editor) ?struct { start: usize, end: usize } {
@@ -241,6 +358,18 @@ pub const Editor = struct {
         while (line_end < self.value.len and self.value[line_end] != '\n') : (line_end += 1) {}
         return @min(line_start + column, line_end);
     }
+
+    pub fn currentLine(self: *const Editor) usize {
+        return countLines(self.value[0..self.cursor]) - 1;
+    }
+
+    pub fn currentColumn(self: *const Editor) usize {
+        return cursorColumn(self.value, self.cursor);
+    }
+
+    pub fn lineCount(self: *const Editor) usize {
+        return countLines(self.value);
+    }
 };
 
 fn isTokenBoundary(byte: u8) bool {
@@ -248,6 +377,39 @@ fn isTokenBoundary(byte: u8) bool {
         '(', ')', '[', ']', '{', '}', ',', '.', ':', ';', '\\', '"', '\'', '`', '+', '-', '*', '=', '!', '?', '<', '>', '|', '&' => true,
         else => false,
     };
+}
+
+fn countLines(text: []const u8) usize {
+    if (text.len == 0) return 1;
+    var count: usize = 1;
+    for (text) |byte| {
+        if (byte == '\n') count += 1;
+    }
+    return count;
+}
+
+fn cursorColumn(value: []const u8, cursor: usize) usize {
+    const line_start = std.mem.lastIndexOfScalar(u8, value[0..cursor], '\n') orelse return cursor;
+    return cursor - line_start - 1;
+}
+
+fn lineStartForIndex(value: []const u8, target_line: usize) usize {
+    var current_line: usize = 0;
+    var start: usize = 0;
+    var index: usize = 0;
+    while (index < value.len and current_line < target_line) : (index += 1) {
+        if (value[index] == '\n') {
+            current_line += 1;
+            start = index + 1;
+        }
+    }
+    return start;
+}
+
+fn lineEndForIndex(value: []const u8, target_line: usize) usize {
+    var index = lineStartForIndex(value, target_line);
+    while (index < value.len and value[index] != '\n') : (index += 1) {}
+    return index;
 }
 
 test "editor supports inserts deletions and word motion" {
@@ -307,6 +469,34 @@ test "editor supports selection state" {
 
     editor.clearSelection();
     try std.testing.expect(editor.selectedRange() == null);
+}
+
+test "editor replaces active selection when typing" {
+    var editor = try Editor.init(std.testing.allocator, "hello");
+    defer editor.deinit(std.testing.allocator);
+
+    editor.selectAll();
+    try editor.insertText(std.testing.allocator, "ziggy");
+    try std.testing.expectEqualStrings("ziggy", editor.value);
+    try std.testing.expectEqual(@as(usize, 5), editor.cursor);
+}
+
+test "editor supports vertical motion" {
+    var editor = try Editor.init(std.testing.allocator, "abc\nde\nfghi");
+    defer editor.deinit(std.testing.allocator);
+
+    editor.cursor = 6;
+    editor.moveDown();
+    try std.testing.expectEqual(@as(usize, 9), editor.cursor);
+
+    editor.moveUp();
+    try std.testing.expectEqual(@as(usize, 6), editor.cursor);
+
+    editor.moveLineHome();
+    try std.testing.expectEqual(@as(usize, 4), editor.cursor);
+
+    editor.moveLineEnd();
+    try std.testing.expectEqual(@as(usize, 6), editor.cursor);
 }
 
 test "editor maps line and column to cursor index" {

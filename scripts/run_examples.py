@@ -46,6 +46,12 @@ EXAMPLES = {
         "exe": "ziggy-controls-demo.exe",
         "desc": "zigzag-style controls: form, table, tree, virtual list, dropdown, and more.",
     },
+    "editor": {
+        "label": "Editor Demo",
+        "build_step": "example-editor",
+        "exe": "ziggy-editor-demo.exe",
+        "desc": "Interactive editor-style workspace using the new shell and editor support scaffolding.",
+    },
 }
 
 
@@ -70,6 +76,26 @@ def launch_example(name: str) -> int:
         return code
     exe_path = REPO / "zig-out" / "bin" / EXAMPLES[name]["exe"]
     return subprocess.run([str(exe_path)], cwd=REPO).returncode
+
+
+def launch_example_in_new_window(name: str) -> int:
+    code = ensure_built(name)
+    if code != 0:
+        return code
+
+    exe_path = REPO / "zig-out" / "bin" / EXAMPLES[name]["exe"]
+    command = f"Set-Location '{REPO}'; & '{exe_path}'"
+    subprocess.Popen(
+        [
+            "powershell",
+            "-NoExit",
+            "-Command",
+            command,
+        ],
+        cwd=REPO,
+        creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+    )
+    return 0
 
 
 def print_examples() -> None:
@@ -103,6 +129,7 @@ def main() -> int:
     parser.add_argument("--list", action="store_true", help="List available examples.")
     parser.add_argument("--build", action="store_true", help="Build the selected example instead of running it.")
     parser.add_argument("--build-all", action="store_true", help="Build all examples.")
+    parser.add_argument("--new-window", action="store_true", help="Launch the selected example in a separate terminal window.")
     args = parser.parse_args()
 
     if args.list:
@@ -116,6 +143,8 @@ def main() -> int:
         return build_example(args.example)
 
     if args.example:
+        if args.new_window:
+            return launch_example_in_new_window(args.example)
         return launch_example(args.example)
 
     return interactive_menu()
