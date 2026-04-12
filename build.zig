@@ -94,6 +94,28 @@ pub fn build(b: *std.Build) void {
     editor_demo.root_module.addImport("ziggy", mod);
     b.installArtifact(editor_demo);
 
+    const log_demo = b.addExecutable(.{
+        .name = "ziggy-log-viewer-demo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/log_viewer_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    log_demo.root_module.addImport("ziggy", mod);
+    b.installArtifact(log_demo);
+
+    const text_buffer_demo = b.addExecutable(.{
+        .name = "ziggy-text-buffer-demo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/text_buffer_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    text_buffer_demo.root_module.addImport("ziggy", mod);
+    b.installArtifact(text_buffer_demo);
+
     const tests = b.addTest(.{
         .root_module = mod,
     });
@@ -129,4 +151,12 @@ pub fn build(b: *std.Build) void {
     const run_editor_demo = b.addRunArtifact(editor_demo);
     const editor_demo_step = b.step("example-editor", "Run the editor workspace demo");
     editor_demo_step.dependOn(&run_editor_demo.step);
+
+    const run_log_demo = b.addRunArtifact(log_demo);
+    const log_demo_step = b.step("example-log-viewer", "Run the sticky log viewer demo");
+    log_demo_step.dependOn(&run_log_demo.step);
+
+    const run_text_buffer_demo = b.addRunArtifact(text_buffer_demo);
+    const text_buffer_demo_step = b.step("example-text-buffer", "Run the text buffer history demo");
+    text_buffer_demo_step.dependOn(&run_text_buffer_demo.step);
 }

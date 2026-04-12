@@ -31,6 +31,12 @@ pub fn Router(comptime Scope: type, comptime Action: type) type {
             self.bindings.deinit(self.allocator);
         }
 
+        pub fn clearBindings(self: *Self) void {
+            self.bindings.clearRetainingCapacity();
+            self.last_scope = null;
+            self.last_action = null;
+        }
+
         pub fn bindGlobal(self: *Self, key: parser.Key, action: Action) !void {
             try self.bind(null, key, action);
         }

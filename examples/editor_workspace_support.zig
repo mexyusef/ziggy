@@ -107,6 +107,14 @@ pub fn handleEditorKey(
             try state.editor.deletePreviousWord(allocator);
             state.completion.clear(allocator);
         },
+        .ctrl_z => {
+            _ = try state.editor.undo(allocator);
+            state.completion.clear(allocator);
+        },
+        .ctrl_y => {
+            _ = try state.editor.redo(allocator);
+            state.completion.clear(allocator);
+        },
         .ctrl_space => try state.completion.refresh(allocator, &state.editor, suggestions),
         else => return false,
     }

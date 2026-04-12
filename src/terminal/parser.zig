@@ -8,16 +8,29 @@ pub const Key = union(enum) {
     backspace,
     delete,
     ctrl_a,
+    ctrl_b,
+    ctrl_f,
+    ctrl_g,
+    ctrl_h,
     ctrl_d,
     ctrl_e,
     ctrl_j,
     ctrl_k,
+    ctrl_l,
     ctrl_n,
+    ctrl_o,
     ctrl_p,
+    ctrl_q,
     ctrl_r,
+    ctrl_s,
     ctrl_space,
+    ctrl_t,
     ctrl_u,
+    ctrl_v,
     ctrl_w,
+    ctrl_x,
+    ctrl_y,
+    ctrl_z,
     home,
     end,
     page_up,
@@ -70,18 +83,31 @@ const ParseResult = struct {
 pub fn parseOne(bytes: []const u8) ?ParseResult {
     if (bytes.len == 0) return null;
     if (bytes[0] == 1) return .{ .event = .{ .key = .ctrl_a }, .consumed = 1 };
+    if (bytes[0] == 2) return .{ .event = .{ .key = .ctrl_b }, .consumed = 1 };
     if (bytes[0] == 3) return .{ .event = .{ .key = .ctrl_c }, .consumed = 1 };
     if (bytes[0] == 4) return .{ .event = .{ .key = .ctrl_d }, .consumed = 1 };
     if (bytes[0] == 5) return .{ .event = .{ .key = .ctrl_e }, .consumed = 1 };
+    if (bytes[0] == 6) return .{ .event = .{ .key = .ctrl_f }, .consumed = 1 };
+    if (bytes[0] == 7) return .{ .event = .{ .key = .ctrl_g }, .consumed = 1 };
+    if (bytes[0] == 8) return .{ .event = .{ .key = .ctrl_h }, .consumed = 1 };
     if (bytes[0] == 10) return .{ .event = .{ .key = .ctrl_j }, .consumed = 1 };
     if (bytes[0] == 11) return .{ .event = .{ .key = .ctrl_k }, .consumed = 1 };
+    if (bytes[0] == 12) return .{ .event = .{ .key = .ctrl_l }, .consumed = 1 };
     if (bytes[0] == 14) return .{ .event = .{ .key = .ctrl_n }, .consumed = 1 };
+    if (bytes[0] == 15) return .{ .event = .{ .key = .ctrl_o }, .consumed = 1 };
     if (bytes[0] == 16) return .{ .event = .{ .key = .ctrl_p }, .consumed = 1 };
+    if (bytes[0] == 17) return .{ .event = .{ .key = .ctrl_q }, .consumed = 1 };
     if (bytes[0] == 18) return .{ .event = .{ .key = .ctrl_r }, .consumed = 1 };
+    if (bytes[0] == 19) return .{ .event = .{ .key = .ctrl_s }, .consumed = 1 };
     if (bytes[0] == 0) return .{ .event = .{ .key = .ctrl_space }, .consumed = 1 };
     if (bytes[0] == '\t') return .{ .event = .{ .key = .tab }, .consumed = 1 };
+    if (bytes[0] == 20) return .{ .event = .{ .key = .ctrl_t }, .consumed = 1 };
     if (bytes[0] == 21) return .{ .event = .{ .key = .ctrl_u }, .consumed = 1 };
+    if (bytes[0] == 22) return .{ .event = .{ .key = .ctrl_v }, .consumed = 1 };
     if (bytes[0] == 23) return .{ .event = .{ .key = .ctrl_w }, .consumed = 1 };
+    if (bytes[0] == 24) return .{ .event = .{ .key = .ctrl_x }, .consumed = 1 };
+    if (bytes[0] == 25) return .{ .event = .{ .key = .ctrl_y }, .consumed = 1 };
+    if (bytes[0] == 26) return .{ .event = .{ .key = .ctrl_z }, .consumed = 1 };
     if (bytes[0] == '\r' or bytes[0] == '\n') return .{ .event = .{ .key = .enter }, .consumed = 1 };
     if (bytes[0] == 127 or bytes[0] == 8) return .{ .event = .{ .key = .backspace }, .consumed = 1 };
     if (bytes[0] == 0x1b) {
@@ -261,9 +287,21 @@ test "parser reads editor control keys" {
     try std.testing.expect(ctrl_a.event == .key);
     try std.testing.expect(ctrl_a.event.key == .ctrl_a);
 
+    const ctrl_b = parseOne(&[_]u8{2}).?;
+    try std.testing.expect(ctrl_b.event == .key);
+    try std.testing.expect(ctrl_b.event.key == .ctrl_b);
+
     const ctrl_e = parseOne(&[_]u8{5}).?;
     try std.testing.expect(ctrl_e.event == .key);
     try std.testing.expect(ctrl_e.event.key == .ctrl_e);
+
+    const ctrl_f = parseOne(&[_]u8{6}).?;
+    try std.testing.expect(ctrl_f.event == .key);
+    try std.testing.expect(ctrl_f.event.key == .ctrl_f);
+
+    const ctrl_g = parseOne(&[_]u8{7}).?;
+    try std.testing.expect(ctrl_g.event == .key);
+    try std.testing.expect(ctrl_g.event.key == .ctrl_g);
 
     const ctrl_j = parseOne(&[_]u8{10}).?;
     try std.testing.expect(ctrl_j.event == .key);
@@ -273,17 +311,37 @@ test "parser reads editor control keys" {
     try std.testing.expect(ctrl_k.event == .key);
     try std.testing.expect(ctrl_k.event.key == .ctrl_k);
 
+    const ctrl_l = parseOne(&[_]u8{12}).?;
+    try std.testing.expect(ctrl_l.event == .key);
+    try std.testing.expect(ctrl_l.event.key == .ctrl_l);
+
     const ctrl_n = parseOne(&[_]u8{14}).?;
     try std.testing.expect(ctrl_n.event == .key);
     try std.testing.expect(ctrl_n.event.key == .ctrl_n);
+
+    const ctrl_o = parseOne(&[_]u8{15}).?;
+    try std.testing.expect(ctrl_o.event == .key);
+    try std.testing.expect(ctrl_o.event.key == .ctrl_o);
 
     const ctrl_p = parseOne(&[_]u8{16}).?;
     try std.testing.expect(ctrl_p.event == .key);
     try std.testing.expect(ctrl_p.event.key == .ctrl_p);
 
+    const ctrl_s = parseOne(&[_]u8{19}).?;
+    try std.testing.expect(ctrl_s.event == .key);
+    try std.testing.expect(ctrl_s.event.key == .ctrl_s);
+
+    const ctrl_t = parseOne(&[_]u8{20}).?;
+    try std.testing.expect(ctrl_t.event == .key);
+    try std.testing.expect(ctrl_t.event.key == .ctrl_t);
+
     const ctrl_u = parseOne(&[_]u8{21}).?;
     try std.testing.expect(ctrl_u.event == .key);
     try std.testing.expect(ctrl_u.event.key == .ctrl_u);
+
+    const ctrl_v = parseOne(&[_]u8{22}).?;
+    try std.testing.expect(ctrl_v.event == .key);
+    try std.testing.expect(ctrl_v.event.key == .ctrl_v);
 
     const ctrl_r = parseOne(&[_]u8{18}).?;
     try std.testing.expect(ctrl_r.event == .key);
@@ -296,6 +354,14 @@ test "parser reads editor control keys" {
     const ctrl_space = parseOne(&[_]u8{0}).?;
     try std.testing.expect(ctrl_space.event == .key);
     try std.testing.expect(ctrl_space.event.key == .ctrl_space);
+
+    const ctrl_y = parseOne(&[_]u8{25}).?;
+    try std.testing.expect(ctrl_y.event == .key);
+    try std.testing.expect(ctrl_y.event.key == .ctrl_y);
+
+    const ctrl_z = parseOne(&[_]u8{26}).?;
+    try std.testing.expect(ctrl_z.event == .key);
+    try std.testing.expect(ctrl_z.event.key == .ctrl_z);
 }
 
 test "parser reads word movement keys" {

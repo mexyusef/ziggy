@@ -85,6 +85,22 @@ pub const Tty = struct {
         self.raw_mode = true;
     }
 
+    pub fn restoreTerminalModes(self: *Tty) void {
+        if (!self.raw_mode) return;
+        if (self.writer) |writer| {
+            if (self.capabilities.alternate_screen and self.alternate_screen_active) {
+                ansi.writeEnterAlternateScreen(writer) catch {};
+            }
+            if (self.capabilities.mouse) {
+                ansi.writeEnableMouse(writer) catch {};
+            }
+            if (self.capabilities.bracketed_paste) {
+                ansi.writeEnableBracketedPaste(writer) catch {};
+            }
+            writer.flush() catch {};
+        }
+    }
+
     pub fn leaveRawMode(self: *Tty) void {
         if (self.writer) |writer| {
             if (self.capabilities.bracketed_paste) {

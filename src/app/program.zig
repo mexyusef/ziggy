@@ -103,6 +103,7 @@ pub fn Program(comptime Model: type, comptime Msg: type) type {
                 },
                 .focus => |focused| {
                     self.root.focused = focused;
+                    if (focused) self.tty.restoreTerminalModes();
                     root_changed = true;
                 },
                 .key => |key| {

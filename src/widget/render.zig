@@ -531,6 +531,10 @@ fn renderTruncatedLine(
     }
 
     const ellipsis = "...";
+    if (width_usize <= ellipsis.len) {
+        screen.writeText(.{ .x = point.x, .y = point.y }, ellipsis[0..width_usize], style);
+        return;
+    }
     const keep = width_usize - ellipsis.len;
     var buf: [1024]u8 = undefined;
     const out = switch (mode) {

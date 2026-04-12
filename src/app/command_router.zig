@@ -22,8 +22,12 @@ pub fn Router(comptime Action: type) type {
             try self.keymap.bind(key, action);
         }
 
+        pub fn resolve(self: *const Self, key: parser.Key) ?Action {
+            return self.keymap.resolve(key);
+        }
+
         pub fn handleKey(self: *Self, event: *input_mod.KeyEvent) ?Action {
-            const action = self.keymap.resolve(event.key) orelse return null;
+            const action = self.resolve(event.key) orelse return null;
             self.last_action = action;
             event.preventDefault();
             event.stopPropagation();
