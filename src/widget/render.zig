@@ -305,6 +305,11 @@ fn renderTextArea(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mo
     if (width == 0 or height == 0) return;
     fillRect(screen, rect, data.style);
 
+    if (data.wrap_lines) {
+        renderWrappedTextArea(screen, rect, data, width, height);
+        return;
+    }
+
     const cursor = @min(data.cursor, data.value.len);
     const cursor_line = countLines(data.value[0..cursor]) - 1;
 
@@ -327,6 +332,10 @@ fn renderTextArea(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mo
         @memcpy(line_buf[0..prefix_len], prefix[0..prefix_len]);
 
         const cursor_on_line = findCursorOnLine(data.value, cursor, line_index);
+        const line_style = if (data.current_line) |current_line|
+            if (line_index == current_line and data.current_line_style != null) data.current_line_style.? else data.style
+        else
+            data.style;
         var total = prefix_len;
 
         if (cursor_on_line) |col| {
@@ -364,8 +373,9 @@ fn renderTextArea(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mo
         renderTextAreaLine(
             screen,
             .{ .x = rect.x, .y = rect.y + @as(u16, @intCast(draw_row)) },
+            width,
             line_buf[0..@min(total, width)],
-            data.style,
+            line_style,
             data.selection_style,
             lineSelectionRange(data, line_index, prefix_len),
         );
@@ -387,22 +397,119 @@ fn renderTextArea(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mo
             line_buf[total] = '_';
             total += 1;
         }
-        renderTextAreaLine(screen, .{ .x = rect.x, .y = rect.y }, line_buf[0..@min(total, width)], data.style, data.selection_style, null);
+        renderTextAreaLine(screen, .{ .x = rect.x, .y = rect.y }, width, line_buf[0..@min(total, width)], data.style, data.selection_style, null);
     }
 }
 
 fn renderTextAreaLine(
     screen: *screen_mod.Screen,
     origin: screen_mod.Point,
+    width: usize,
     text: []const u8,
     style: style_mod.Style,
     selection_style: style_mod.Style,
     selection: ?SelectionRange,
 ) void {
+    var fill_index: usize = 0;
+    while (fill_index < width) : (fill_index += 1) {
+        screen.setCell(.{ .x = origin.x + @as(u16, @intCast(fill_index)), .y = origin.y }, ' ', style);
+    }
     var index: usize = 0;
     while (index < text.len) : (index += 1) {
         const active = if (selection) |range| index >= range.start and index < range.end else false;
         screen.setCell(.{ .x = origin.x + @as(u16, @intCast(index)), .y = origin.y }, text[index], if (active) selection_style else style);
+    }
+}
+
+fn renderWrappedTextArea(
+    screen: *screen_mod.Screen,
+    rect: rect_mod.Rect,
+    data: node_mod.Node.TextAreaData,
+    width: usize,
+    height: usize,
+) void {
+    const cursor = @min(data.cursor, data.value.len);
+    var line_index: usize = 0;
+    var visual_row_index: usize = 0;
+    var draw_row: usize = 0;
+    var lines = std.mem.splitScalar(u8, data.value, '\n');
+    while (lines.next()) |line| : (line_index += 1) {
+        if (draw_row >= height) break;
+
+        const line_style = if (data.current_line) |current_line|
+            if (line_index == current_line and data.current_line_style != null) data.current_line_style.? else data.style
+        else
+            data.style;
+        const cursor_on_line = findCursorOnLine(data.value, cursor, line_index);
+        const prefix = if (line_index == 0) data.prompt else "";
+        var start: usize = 0;
+        var first_chunk = true;
+
+        while (true) {
+            if (draw_row >= height) break;
+
+            var line_buf: [1024]u8 = undefined;
+            const active_prefix = if (first_chunk) prefix else "";
+            const active_prefix_len = @min(active_prefix.len, @min(width, line_buf.len));
+            if (active_prefix_len > 0) @memcpy(line_buf[0..active_prefix_len], active_prefix[0..active_prefix_len]);
+            var total: usize = active_prefix_len;
+
+            const chunk_width = width -| active_prefix_len;
+            const chunk_end = if (chunk_width == 0) start else @min(start + chunk_width, line.len);
+            if (chunk_end > start) {
+                const cap = @min(chunk_end - start, line_buf.len - total);
+                @memcpy(line_buf[total .. total + cap], line[start .. start + cap]);
+                total += cap;
+            }
+
+            if (cursor_on_line) |col| {
+                if (col >= start and col <= chunk_end) {
+                    const cursor_slot = active_prefix_len + (col - start);
+                    if (cursor_slot < @min(width, line_buf.len)) {
+                        if (cursor_slot >= total) {
+                            var pad_index = total;
+                            while (pad_index < cursor_slot and pad_index < line_buf.len) : (pad_index += 1) line_buf[pad_index] = ' ';
+                            total = cursor_slot;
+                        }
+                        line_buf[cursor_slot] = if (col < line.len) line[col] else '_';
+                        total = @max(total, cursor_slot + 1);
+                    }
+                }
+            }
+
+            if (visual_row_index >= data.offset_line) {
+                renderTextAreaLine(
+                    screen,
+                    .{ .x = rect.x, .y = rect.y + @as(u16, @intCast(draw_row)) },
+                    width,
+                    line_buf[0..@min(total, width)],
+                    line_style,
+                    data.selection_style,
+                    null,
+                );
+                draw_row += 1;
+            }
+            visual_row_index += 1;
+
+            if (chunk_end >= line.len) break;
+            start = chunk_end;
+            first_chunk = false;
+        }
+    }
+
+    if (data.value.len == 0) {
+        var line_buf: [1024]u8 = undefined;
+        var total: usize = 0;
+        if (data.placeholder) |placeholder| {
+            const cap = @min(placeholder.len, @min(width, line_buf.len));
+            @memcpy(line_buf[0..cap], placeholder[0..cap]);
+            total = cap;
+        }
+        if (data.focused and total < @min(width, line_buf.len)) {
+            line_buf[total] = '_';
+            total += 1;
+        }
+        renderTextAreaLine(screen, .{ .x = rect.x, .y = rect.y }, width, line_buf[0..@min(total, width)], data.style, data.selection_style, null);
     }
 }
 
@@ -570,14 +677,19 @@ fn renderTruncatedLine(
 }
 
 fn renderModal(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.Node.ModalData) void {
-    const width: u16 = @min(rect.width -| 4, 50);
-    const height: u16 = @min(rect.height -| 4, 6);
+    const width: u16 = @min(rect.width -| 4, 80);
+    const height: u16 = @min(rect.height -| 4, @max(rect.height * 2 / 3, 10));
     const x: u16 = rect.x + (rect.width -| width) / 2;
     const y: u16 = rect.y + (rect.height -| height) / 2;
-    const body = node_mod.allocNode(screen.allocator, .{
-        .text = .{ .text = data.body, .style = data.style, .wrap = .wrap },
-    }) catch return;
-    defer screen.allocator.destroy(body);
+    const body = if (data.child) |child|
+        child
+    else if (data.body) |text|
+        node_mod.allocNode(screen.allocator, .{
+            .text = .{ .text = text, .style = data.style, .wrap = .wrap },
+        }) catch return
+    else
+        return;
+    defer if (data.child == null) screen.allocator.destroy(body);
     const box = node_mod.allocNode(screen.allocator, .{
         .box = .{
             .title = data.title,

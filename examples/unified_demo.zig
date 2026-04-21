@@ -37,7 +37,7 @@ const entries = [_]ExampleEntry{
     .{ .kind = .dialog, .label = "dialog_demo", .exe_name = "ziggy-dialog-demo.exe", .summary = "Command dialog, picker, tooltip, autocomplete, and toast surfaces." },
     .{ .kind = .full, .label = "full_demo", .exe_name = "ziggy-full-demo.exe", .summary = "Composite shell demo with transcript, dialogs, and workspace framing." },
     .{ .kind = .interactive, .label = "interactive_demo", .exe_name = "ziggy-interactive-demo.exe", .summary = "Dedicated keystroke and input handling demo." },
-    .{ .kind = .editor, .label = "editor_demo", .exe_name = "ziggy-editor-demo.exe", .summary = "Editor workspace with transcript, palette, and completion flow." },
+    .{ .kind = .editor, .label = "editor_demo", .exe_name = "ziggy-editor-demo.exe", .summary = "Editor workspace with transcript, palette, and completion support." },
     .{ .kind = .log_viewer, .label = "log_viewer_demo", .exe_name = "ziggy-log-viewer-demo.exe", .summary = "Scrollable log viewer and static region behavior demo." },
     .{ .kind = .text_buffer, .label = "text_buffer_demo", .exe_name = "ziggy-text-buffer-demo.exe", .summary = "Text buffer editing and history behavior demo." },
     .{ .kind = .render_to_string, .label = "render_to_string_demo", .exe_name = "ziggy-render-to-string-demo.exe", .summary = "Themed ANSI snapshot demo for non-interactive rendering." },

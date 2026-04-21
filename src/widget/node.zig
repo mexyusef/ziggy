@@ -186,12 +186,15 @@ pub const Node = union(enum) {
         cursor: usize = 0,
         selection_start: ?usize = null,
         selection_end: ?usize = null,
+        current_line: ?usize = null,
+        wrap_lines: bool = false,
         offset_line: usize = 0,
         offset_column: usize = 0,
         scroll_margin: usize = 1,
         focused: bool = true,
         placeholder: ?[]const u8 = null,
         style: style_mod.Style = .{},
+        current_line_style: ?style_mod.Style = null,
         selection_style: style_mod.Style = .{ .fg = .{ .ansi = 15 }, .bg = .{ .ansi = 4 }, .bold = true },
         focus: focus_mod.FocusState = .{},
     };
@@ -227,7 +230,8 @@ pub const Node = union(enum) {
 
     pub const ModalData = struct {
         title: []const u8,
-        body: []const u8,
+        body: ?[]const u8 = null,
+        child: ?*const Node = null,
         style: style_mod.Style = .{},
         border_style: border_mod.BorderStyle = .double,
     };

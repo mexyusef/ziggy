@@ -18,6 +18,7 @@ pub const Options = struct {
     focused: bool = true,
     placeholder: ?[]const u8 = "Type here...",
     show_scrollbar: bool = true,
+    wrap_lines: bool = false,
     border_style: border_mod.BorderStyle = .single,
 };
 
@@ -26,19 +27,29 @@ pub fn build(
     editor: *const editor_mod.Editor,
     options: Options,
 ) !*const node_mod.Node {
+    const scrollbar_total = if (options.wrap_lines)
+        text_area.wrappedLineCount(editor, "", options.viewport.width)
+    else
+        editor.lineCount();
+    const gutter_offset = if (options.wrap_lines)
+        text_area.lineIndexForWrappedOffset(editor, "", options.viewport.width, options.viewport.offset_line)
+    else
+        options.viewport.offset_line;
     const gutter = try line_numbers.build(allocator, .{
         .count = editor.lineCount(),
         .selected = editor.currentLine() + 1,
-        .offset = options.viewport.offset_line,
+        .offset = gutter_offset,
         .viewport_height = options.viewport_height,
         .style = options.theme.status_idle,
         .selected_style = options.theme.selected_alt,
     });
 
     const editor_node = try text_area.buildEditorWithViewport(allocator, editor, options.viewport, .{
-        .prompt = options.prompt,
+        .prompt = "",
         .focused = options.focused,
         .style = options.theme.input,
+        .current_line_style = options.theme.input_active,
+        .wrap_lines = options.wrap_lines,
         .placeholder = options.placeholder,
     });
 
@@ -51,7 +62,7 @@ pub fn build(
         .axis = .vertical,
         .offset = options.viewport.offset_line,
         .viewport = options.viewport_height,
-        .total = editor.lineCount(),
+        .total = scrollbar_total,
         .style = options.theme.status_idle,
         .thumb_style = options.theme.selected_alt,
     });

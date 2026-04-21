@@ -2,6 +2,13 @@ const std = @import("std");
 
 pub const Key = union(enum) {
     char: u8,
+    alt_z,
+    f1,
+    f8,
+    f9,
+    f10,
+    f11,
+    f12,
     enter,
     tab,
     back_tab,
@@ -115,10 +122,23 @@ pub fn parseOne(bytes: []const u8) ?ParseResult {
             return switch (bytes[1]) {
                 'b', 'B' => .{ .event = .{ .key = .word_left }, .consumed = 2 },
                 'f', 'F' => .{ .event = .{ .key = .word_right }, .consumed = 2 },
+                'z', 'Z' => .{ .event = .{ .key = .alt_z }, .consumed = 2 },
                 else => .{ .event = .{ .key = .escape }, .consumed = 1 },
             };
         }
         if (bytes.len >= 3 and bytes[1] == '[') {
+            if (bytes.len >= 4 and bytes[2] == '1' and bytes[3] == '1' and bytes.len >= 5 and bytes[4] == '~')
+                return .{ .event = .{ .key = .f1 }, .consumed = 5 };
+            if (bytes.len >= 4 and bytes[2] == '1' and bytes[3] == '9' and bytes.len >= 5 and bytes[4] == '~')
+                return .{ .event = .{ .key = .f8 }, .consumed = 5 };
+            if (bytes.len >= 4 and bytes[2] == '2' and bytes[3] == '0' and bytes.len >= 5 and bytes[4] == '~')
+                return .{ .event = .{ .key = .f9 }, .consumed = 5 };
+            if (bytes.len >= 4 and bytes[2] == '2' and bytes[3] == '1' and bytes.len >= 5 and bytes[4] == '~')
+                return .{ .event = .{ .key = .f10 }, .consumed = 5 };
+            if (bytes.len >= 4 and bytes[2] == '2' and bytes[3] == '3' and bytes.len >= 5 and bytes[4] == '~')
+                return .{ .event = .{ .key = .f11 }, .consumed = 5 };
+            if (bytes.len >= 4 and bytes[2] == '2' and bytes[3] == '4' and bytes.len >= 5 and bytes[4] == '~')
+                return .{ .event = .{ .key = .f12 }, .consumed = 5 };
             if (bytes.len >= 6 and bytes[2] == '1' and bytes[3] == ';' and bytes[4] == '5') {
                 return switch (bytes[5]) {
                     'C' => .{ .event = .{ .key = .word_right }, .consumed = 6 },
@@ -137,6 +157,7 @@ pub fn parseOne(bytes: []const u8) ?ParseResult {
                 return parseMouse(bytes);
             }
             return switch (bytes[2]) {
+                'P' => .{ .event = .{ .key = .f1 }, .consumed = 3 },
                 'A' => .{ .event = .{ .key = .up }, .consumed = 3 },
                 'B' => .{ .event = .{ .key = .down }, .consumed = 3 },
                 'C' => .{ .event = .{ .key = .right }, .consumed = 3 },
@@ -233,6 +254,15 @@ test "parser reads arrow key" {
     try std.testing.expectEqual(@as(usize, 3), parsed.consumed);
     try std.testing.expect(parsed.event == .key);
     try std.testing.expect(parsed.event.key == .up);
+}
+
+test "parser reads function keys" {
+    try std.testing.expect(parseOne("\x1bOP").?.event.key == .f1);
+    try std.testing.expect(parseOne("\x1b[19~").?.event.key == .f8);
+    try std.testing.expect(parseOne("\x1b[20~").?.event.key == .f9);
+    try std.testing.expect(parseOne("\x1b[21~").?.event.key == .f10);
+    try std.testing.expect(parseOne("\x1b[23~").?.event.key == .f11);
+    try std.testing.expect(parseOne("\x1b[24~").?.event.key == .f12);
 }
 
 test "parser reads terminal focus events" {
@@ -372,6 +402,10 @@ test "parser reads word movement keys" {
     const alt_f = parseOne("\x1bf").?;
     try std.testing.expect(alt_f.event == .key);
     try std.testing.expect(alt_f.event.key == .word_right);
+
+    const alt_z = parseOne("\x1bz").?;
+    try std.testing.expect(alt_z.event == .key);
+    try std.testing.expect(alt_z.event.key == .alt_z);
 
     const ctrl_left = parseOne("\x1b[1;5D").?;
     try std.testing.expectEqual(@as(usize, 6), ctrl_left.consumed);

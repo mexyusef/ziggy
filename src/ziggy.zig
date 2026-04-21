@@ -49,6 +49,8 @@ pub const Palette = @import("widget/palette.zig");
 pub const HeaderBar = @import("widget/header_bar.zig");
 pub const FooterBar = @import("widget/footer_bar.zig");
 pub const WorkspaceShell = @import("widget/workspace_shell.zig");
+pub const DockLayout = @import("widget/dock_layout.zig");
+pub const DockShell = @import("widget/dock_shell.zig");
 pub const StatusSegments = @import("widget/status_segments.zig");
 pub const Sidebar = @import("widget/sidebar.zig");
 pub const Separator = @import("widget/separator.zig");
@@ -200,6 +202,8 @@ test {
     _ = @import("widget/header_bar.zig");
     _ = @import("widget/footer_bar.zig");
     _ = @import("widget/workspace_shell.zig");
+    _ = @import("widget/dock_layout.zig");
+    _ = @import("widget/dock_shell.zig");
     _ = @import("widget/status_segments.zig");
     _ = @import("widget/sidebar.zig");
     _ = @import("widget/separator.zig");
