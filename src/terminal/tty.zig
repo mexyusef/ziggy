@@ -21,6 +21,7 @@ var global_console_snapshot: ConsoleSnapshot = .{};
 pub const Tty = struct {
     reader: ?*std.Io.Reader = null,
     writer: ?*std.Io.Writer = null,
+    output_file: ?std.fs.File = null,
     size: screen_mod.Size = .{ .width = 80, .height = 24 },
     capabilities: capabilities_mod.Capabilities = .{},
     raw_mode: bool = false,
@@ -34,6 +35,7 @@ pub const Tty = struct {
         return .{
             .reader = reader,
             .writer = writer,
+            .output_file = null,
             .size = size,
         };
     }
@@ -47,6 +49,7 @@ pub const Tty = struct {
         return .{
             .reader = reader,
             .writer = writer,
+            .output_file = null,
             .size = size,
             .capabilities = capabilities,
         };

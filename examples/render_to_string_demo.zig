@@ -2,6 +2,8 @@ const std = @import("std");
 const ziggy = @import("ziggy");
 
 pub fn main() !void {
+    _ = ziggy.prepareConsole();
+
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -16,10 +18,7 @@ pub fn main() !void {
     });
     defer allocator.free(output);
 
-    var buffer: [8192]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&buffer);
-    try stdout_writer.interface.writeAll(output);
-    try stdout_writer.interface.flush();
+    try ziggy.writeStdout(allocator, output);
 }
 
 pub fn buildRoot(allocator: std.mem.Allocator) !*const ziggy.Node {

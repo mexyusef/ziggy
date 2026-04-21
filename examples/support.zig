@@ -68,11 +68,7 @@ const KEY_EVENT: u16 = 0x0001;
 
 pub fn restoreConsoleAfterFailure() void {
     ziggy.forceRestoreConsole();
-    var buffer: [256]u8 = undefined;
-    var stderr_writer = std.fs.File.stderr().writer(&buffer);
-    const stderr = &stderr_writer.interface;
-    _ = stderr.writeAll("\x1b[?2026l\x1b[?2004l\x1b[?1006l\x1b[?1000l\x1b[?1049l\x1b[0m\r\n") catch {};
-    _ = stderr.flush() catch {};
+    _ = ziggy.writeStderr(std.heap.page_allocator, "\x1b[?2026l\x1b[?2004l\x1b[?1006l\x1b[?1000l\x1b[?1049l\x1b[0m\r\n") catch {};
 }
 
 pub fn panicHandler(message: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
@@ -132,9 +128,6 @@ pub fn renderStatic(root: *const ziggy.Node, size: ziggy.Size) !void {
     defer screen.deinit();
     ziggy.renderNode(&screen, .{ .x = 0, .y = 0, .width = screen.size.width, .height = screen.size.height }, root);
 
-    var buffer: [8192]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&buffer);
-    const stdout = &stdout_writer.interface;
     const output = try ziggy.renderScreenToString(allocator, &screen, .{
         .width = size.width,
         .height = size.height,
@@ -143,8 +136,7 @@ pub fn renderStatic(root: *const ziggy.Node, size: ziggy.Size) !void {
         .include_final_newline = true,
     });
     defer allocator.free(output);
-    try stdout.writeAll(output);
-    try stdout.flush();
+    try ziggy.writeStdout(allocator, output);
 }
 
 pub fn readEvent(allocator: std.mem.Allocator, stdin_file: std.fs.File) !?ziggy.Event {
@@ -173,7 +165,7 @@ pub fn runInteractiveProgram(
     var stdin_reader = stdin_file.reader(&stdin_buffer);
     var stdout_writer = stdout_file.writer(&stdout_buffer);
     const size = detectTerminalSize();
-    const tty = ziggy.Tty.withCapabilities(
+    var tty = ziggy.Tty.withCapabilities(
         &stdin_reader.interface,
         &stdout_writer.interface,
         size,
@@ -185,6 +177,7 @@ pub fn runInteractiveProgram(
             .terminal_title = true,
         },
     );
+    tty.output_file = stdout_file;
 
     var program = try ziggy.Program(Model, Msg).init(allocator, tty, model, options);
     defer program.deinit();
@@ -223,11 +216,7 @@ pub fn clearPendingConsoleInput() void {
 
 pub fn waitForAnyKey(message: []const u8) !void {
     clearPendingConsoleInput();
-    var buffer: [512]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&buffer);
-    const stdout = &stdout_writer.interface;
-    try stdout.writeAll(message);
-    try stdout.flush();
+    try ziggy.writeStdout(std.heap.page_allocator, message);
 
     if (@import("builtin").os.tag == .windows) {
         var record: INPUT_RECORD = undefined;
@@ -241,6 +230,5 @@ pub fn waitForAnyKey(message: []const u8) !void {
         _ = try std.fs.File.stdin().read(&byte);
     }
 
-    try stdout.writeAll("\n");
-    try stdout.flush();
+    try ziggy.writeStdout(std.heap.page_allocator, "\n");
 }

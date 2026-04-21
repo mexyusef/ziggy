@@ -27,6 +27,9 @@ pub const prepareConsole = @import("terminal/console.zig").prepareStdIo;
 pub const RenderProfile = @import("terminal/profile.zig").RenderProfile;
 pub const getRenderProfile = @import("terminal/profile.zig").get;
 pub const setRenderProfile = @import("terminal/profile.zig").set;
+pub const writeStdout = @import("terminal/output.zig").writeStdout;
+pub const writeStderr = @import("terminal/output.zig").writeStderr;
+pub const writeFile = @import("terminal/output.zig").writeFile;
 pub const RenderToStringOptions = @import("render_to_string.zig").RenderToStringOptions;
 pub const renderToString = @import("render_to_string.zig").renderNodeToString;
 pub const renderScreenToString = @import("render_to_string.zig").renderScreenToString;
@@ -163,6 +166,7 @@ test {
     _ = @import("terminal/parser.zig");
     _ = @import("terminal/console.zig");
     _ = @import("terminal/profile.zig");
+    _ = @import("terminal/output.zig");
     _ = @import("render_to_string.zig");
     _ = @import("text/buffer.zig");
     _ = @import("app/program.zig");

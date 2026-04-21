@@ -7,6 +7,7 @@ pub const FakeTerminal = struct {
     allocator: std.mem.Allocator,
     size: screen_mod.Size,
     capabilities: capabilities_mod.Capabilities = .{},
+    file_output: ?std.fs.File = null,
     output_buffer: std.Io.Writer.Allocating,
 
     pub fn init(allocator: std.mem.Allocator, size: screen_mod.Size) FakeTerminal {
@@ -22,7 +23,9 @@ pub const FakeTerminal = struct {
     }
 
     pub fn tty(self: *FakeTerminal) tty_mod.Tty {
-        return tty_mod.Tty.withCapabilities(null, &self.output_buffer.writer, self.size, self.capabilities);
+        var result = tty_mod.Tty.withCapabilities(null, &self.output_buffer.writer, self.size, self.capabilities);
+        result.output_file = self.file_output;
+        return result;
     }
 
     pub fn output(self: *FakeTerminal) []u8 {

@@ -8,6 +8,7 @@ const parser = @import("../terminal/parser.zig");
 const renderer = @import("../terminal/renderer.zig");
 const screen_mod = @import("../terminal/screen.zig");
 const tty_mod = @import("../terminal/tty.zig");
+const output_mod = @import("../terminal/output.zig");
 const widget_render = @import("../widget/render.zig");
 
 pub fn Program(comptime Model: type, comptime Msg: type) type {
@@ -164,8 +165,15 @@ pub fn Program(comptime Model: type, comptime Msg: type) type {
                 try self.model.view(&ctx, &self.back);
             }
             if (self.tty.writer) |writer| {
-                try renderer.renderDiffWithCapabilities(writer, &self.front, &self.back, self.tty.capabilities);
-                try writer.flush();
+                if (self.tty.output_file) |file| {
+                    var out: std.Io.Writer.Allocating = .init(self.allocator);
+                    defer out.deinit();
+                    try renderer.renderDiffWithCapabilities(&out.writer, &self.front, &self.back, self.tty.capabilities);
+                    try output_mod.writeFile(self.allocator, file, out.written());
+                } else {
+                    try renderer.renderDiffWithCapabilities(writer, &self.front, &self.back, self.tty.capabilities);
+                    try writer.flush();
+                }
             }
             self.front.copyFrom(&self.back);
         }
@@ -201,15 +209,23 @@ pub fn Program(comptime Model: type, comptime Msg: type) type {
             if (self.tty.writer) |writer| {
                 if (self.root.title) |title| {
                     if (self.tty.capabilities.terminal_title) {
-                        try @import("../terminal/ansi.zig").writeSetTitle(writer, title);
+                        try self.writeAnsiCommand(writer, struct {
+                            fn emit(w: *std.Io.Writer, value: []const u8) !void {
+                                try @import("../terminal/ansi.zig").writeSetTitle(w, value);
+                            }
+                        }.emit, title);
                     }
                 }
                 if (self.root.tab_status) |status| {
                     if (self.tty.capabilities.tab_status) {
-                        try @import("../terminal/ansi.zig").writeTabStatus(writer, status);
+                        try self.writeAnsiCommand(writer, struct {
+                            fn emit(w: *std.Io.Writer, value: @TypeOf(status)) !void {
+                                try @import("../terminal/ansi.zig").writeTabStatus(w, value);
+                            }
+                        }.emit, status);
                     }
                 }
-                try writer.flush();
+                if (self.tty.output_file == null) try writer.flush();
             }
         }
 
@@ -231,8 +247,11 @@ pub fn Program(comptime Model: type, comptime Msg: type) type {
                     self.root.title = try self.allocator.dupe(u8, title);
                     if (self.tty.writer) |writer| {
                         if (self.tty.capabilities.terminal_title) {
-                            try @import("../terminal/ansi.zig").writeSetTitle(writer, title);
-                            try writer.flush();
+                            try self.writeAnsiCommand(writer, struct {
+                                fn emit(w: *std.Io.Writer, value: []const u8) !void {
+                                    try @import("../terminal/ansi.zig").writeSetTitle(w, value);
+                                }
+                            }.emit, title);
                         }
                     }
                 },
@@ -241,8 +260,11 @@ pub fn Program(comptime Model: type, comptime Msg: type) type {
                     self.root.title = null;
                     if (self.tty.writer) |writer| {
                         if (self.tty.capabilities.terminal_title) {
-                            try @import("../terminal/ansi.zig").writeClearTitle(writer);
-                            try writer.flush();
+                            try self.writeAnsiCommand(writer, struct {
+                                fn emit(w: *std.Io.Writer, _: void) !void {
+                                    try @import("../terminal/ansi.zig").writeClearTitle(w);
+                                }
+                            }.emit, {});
                         }
                     }
                 },
@@ -250,8 +272,11 @@ pub fn Program(comptime Model: type, comptime Msg: type) type {
                     self.root.tab_status = status;
                     if (self.tty.writer) |writer| {
                         if (self.tty.capabilities.tab_status) {
-                            try @import("../terminal/ansi.zig").writeTabStatus(writer, status);
-                            try writer.flush();
+                            try self.writeAnsiCommand(writer, struct {
+                                fn emit(w: *std.Io.Writer, value: @TypeOf(status)) !void {
+                                    try @import("../terminal/ansi.zig").writeTabStatus(w, value);
+                                }
+                            }.emit, status);
                         }
                     }
                 },
@@ -259,11 +284,26 @@ pub fn Program(comptime Model: type, comptime Msg: type) type {
                     self.root.tab_status = null;
                     if (self.tty.writer) |writer| {
                         if (self.tty.capabilities.tab_status) {
-                            try @import("../terminal/ansi.zig").writeClearTabStatus(writer);
-                            try writer.flush();
+                            try self.writeAnsiCommand(writer, struct {
+                                fn emit(w: *std.Io.Writer, _: void) !void {
+                                    try @import("../terminal/ansi.zig").writeClearTabStatus(w);
+                                }
+                            }.emit, {});
                         }
                     }
                 },
+            }
+        }
+
+        fn writeAnsiCommand(self: *Self, writer: *std.Io.Writer, comptime emit: anytype, value: anytype) !void {
+            if (self.tty.output_file) |file| {
+                var out: std.Io.Writer.Allocating = .init(self.allocator);
+                defer out.deinit();
+                try emit(&out.writer, value);
+                try output_mod.writeFile(self.allocator, file, out.written());
+            } else {
+                try emit(writer, value);
+                try writer.flush();
             }
         }
     };
@@ -451,4 +491,43 @@ test "program applies title and tab status on start" {
     try program.start();
     try std.testing.expect(std.mem.indexOf(u8, term.output(), "\x1b]0;ziggy test") != null);
     try std.testing.expect(std.mem.indexOf(u8, term.output(), "\x1b]21337;indicator=#ff9500;status=Working;statusColor=#ff9500") != null);
+}
+
+test "program redraw uses output file path when present" {
+    const text_widget = @import("../widget/text.zig");
+    const style_mod = @import("../style/style.zig");
+
+    const Model = struct {
+        fn update(self: *@This(), event: parser.Event, ctx: *context_mod.Context) command_mod.Command(parser.Event) {
+            _ = self;
+            _ = event;
+            _ = ctx;
+            return .none;
+        }
+
+        fn viewNode(self: *@This(), ctx: *context_mod.Context) !*const @import("../widget/node.zig").Node {
+            _ = self;
+            return try text_widget.build(ctx.allocator, try ctx.allocator.dupe(u8, "unicode ╭"), style_mod.Style{});
+        }
+    };
+
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+
+    const file = try temp.dir.createFile("out.txt", .{ .read = true });
+    defer file.close();
+
+    var term = @import("../testing/fake_terminal.zig").FakeTerminal.init(std.testing.allocator, .{ .width = 20, .height = 3 });
+    defer term.deinit();
+    term.file_output = file;
+
+    var program = try Program(Model, parser.Event).init(std.testing.allocator, term.tty(), .{}, .{});
+    defer program.deinit();
+    try program.start();
+
+    try file.seekTo(0);
+    const contents = try file.readToEndAlloc(std.testing.allocator, 4096);
+    defer std.testing.allocator.free(contents);
+    try std.testing.expect(std.mem.indexOf(u8, term.output(), "unicode") == null);
+    try std.testing.expect(contents.len > 0);
 }
