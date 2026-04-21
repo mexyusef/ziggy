@@ -7,6 +7,8 @@ const node_mod = @import("node.zig");
 const style_mod = @import("../style/style.zig");
 const border_mod = @import("../style/border.zig");
 const focus_mod = @import("focus.zig");
+const parser = @import("../terminal/parser.zig");
+const interaction = @import("../interaction/widget.zig");
 
 pub const Options = struct {
     description: ?[]const u8 = null,
@@ -19,6 +21,14 @@ pub const Options = struct {
     border_style: border_mod.BorderStyle = .double,
     focus: focus_mod.FocusState = .{},
 };
+
+pub const State = struct {
+    selection: interaction.SelectState = .{},
+};
+
+pub fn handleEvent(state: *State, items: []const []const u8, key: parser.Key) interaction.Response {
+    return state.selection.handleListKey(items.len, key);
+}
 
 pub fn build(
     allocator: std.mem.Allocator,
@@ -67,4 +77,13 @@ test "picker dialog builds titled option list" {
     const items = [_][]const u8{ "alpha", "beta" };
     const node = try build(fba.allocator(), "Pick Item", &items, .{ .description = "Choose one item." });
     try std.testing.expect(node.* == .box);
+}
+
+test "picker dialog state navigates and submits" {
+    const items = [_][]const u8{ "alpha", "beta", "gamma" };
+    var state: State = .{};
+    _ = handleEvent(&state, &items, .down);
+    const response = handleEvent(&state, &items, .enter);
+    try std.testing.expectEqual(interaction.Action.submitted, response.action);
+    try std.testing.expectEqual(@as(?usize, 1), response.selected);
 }

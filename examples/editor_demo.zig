@@ -3,6 +3,8 @@ const ziggy = @import("ziggy");
 const support = @import("support.zig");
 const workspace_support = @import("editor_workspace_support.zig");
 
+pub const panic = support.panicHandler;
+
 const Msg = ziggy.Event;
 const Scope = enum {
     workspace,
@@ -548,4 +550,116 @@ pub fn main() !void {
         .title = "ziggy editor demo",
         .tick_interval_ms = 0,
     });
+}
+
+test "editor demo renders an initial frame" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const initial =
+        \\const std = @import("std");
+        \\pub fn main() !void {
+        \\    std.debug.print("hello from ziggy editor demo\\n", .{});
+        \\}
+    ;
+
+    var session = try buildSavedSession(allocator);
+    defer session.deinit(allocator);
+
+    var model: Model = .{
+        .workspace = try workspace_support.EditorWorkspaceState.init(allocator, initial),
+        .pane_tree = try ziggy.PaneTree.State.initSingle(allocator, 1),
+        .panel_host = .{},
+        .palette = try ziggy.PaletteController.State.init(allocator, ""),
+        .actions = ziggy.ActionRouter(Scope, Action).init(allocator),
+    };
+    defer model.workspace.deinit(allocator);
+    defer model.pane_tree.deinit();
+    defer model.panel_host.deinit(allocator);
+    defer model.palette.deinit(allocator);
+    defer model.actions.deinit();
+    try restoreSavedSession(&model, allocator, &session);
+
+    var fake = try ziggy.FakeTerminal.init(allocator, .{ .width = 100, .height = 30 });
+    defer fake.deinit();
+    var program = try ziggy.Program(Model, Msg).init(allocator, fake.tty(), model, .{ .title = "test", .tick_interval_ms = 0 });
+    defer program.deinit();
+    try program.start();
+}
+
+test "editor demo renders completion and palette overlays" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const initial =
+        \\const std = @import("std");
+        \\pub fn main() !void {
+        \\    co
+        \\}
+    ;
+
+    var session = try buildSavedSession(allocator);
+    defer session.deinit(allocator);
+
+    var model: Model = .{
+        .workspace = try workspace_support.EditorWorkspaceState.init(allocator, initial),
+        .pane_tree = try ziggy.PaneTree.State.initSingle(allocator, 1),
+        .panel_host = .{},
+        .palette = try ziggy.PaletteController.State.init(allocator, ""),
+        .actions = ziggy.ActionRouter(Scope, Action).init(allocator),
+    };
+    defer model.workspace.deinit(allocator);
+    defer model.pane_tree.deinit();
+    defer model.panel_host.deinit(allocator);
+    defer model.palette.deinit(allocator);
+    defer model.actions.deinit();
+
+    try restoreSavedSession(&model, allocator, &session);
+    try model.palette.refresh(allocator, &palette_commands);
+    model.palette.open = true;
+    try model.workspace.completion.refresh(allocator, &model.workspace.editor, &completion_items);
+
+    var fake = try ziggy.FakeTerminal.init(allocator, .{ .width = 120, .height = 36 });
+    defer fake.deinit();
+    var screen = try ziggy.Screen.init(allocator, fake.tty().size);
+    defer screen.deinit();
+
+    {
+        var ctx = ziggy.Context{
+            .allocator = allocator,
+            .persistent_allocator = allocator,
+            .size = fake.tty().size,
+            .focused = true,
+            .frame_index = 1,
+            .now_ms = 0,
+            .title = "test",
+            .tab_status = null,
+            .input_dispatcher = undefined,
+            .overlays = undefined,
+        };
+        const palette_root = try model.viewNode(&ctx);
+        ziggy.renderNode(&screen, .{ .x = 0, .y = 0, .width = screen.size.width, .height = screen.size.height }, palette_root);
+    }
+
+    model.palette.clear();
+    screen.clear();
+
+    {
+        var ctx = ziggy.Context{
+            .allocator = allocator,
+            .persistent_allocator = allocator,
+            .size = fake.tty().size,
+            .focused = true,
+            .frame_index = 2,
+            .now_ms = 0,
+            .title = "test",
+            .tab_status = null,
+            .input_dispatcher = undefined,
+            .overlays = undefined,
+        };
+        const completion_root = try model.viewNode(&ctx);
+        ziggy.renderNode(&screen, .{ .x = 0, .y = 0, .width = screen.size.width, .height = screen.size.height }, completion_root);
+    }
 }

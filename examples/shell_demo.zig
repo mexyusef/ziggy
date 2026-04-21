@@ -9,6 +9,11 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    const root = try buildRoot(allocator);
+    try support.renderStatic(root, support.detectTerminalSize());
+}
+
+pub fn buildRoot(allocator: std.mem.Allocator) !*const ziggy.Node {
     const theme = ziggy.defaultAgentTheme();
 
     const header = try ziggy.HeaderBar.build(allocator, "ziggy Shell Demo", .{
@@ -21,8 +26,8 @@ pub fn main() !void {
         .border_style = theme.border_style,
     });
 
-    const nav_items = [_][]const u8{ "Chat", "Tasks", "Tools", "Sessions" };
-    const nav = try ziggy.NavBar.build(allocator, &nav_items, .{
+    const nav_items = try allocator.dupe([]const u8, &[_][]const u8{ "Chat", "Tasks", "Tools", "Sessions" });
+    const nav = try ziggy.NavBar.build(allocator, nav_items, .{
         .selected = 0,
         .style = theme.pane,
         .selected_style = theme.selected_alt,
@@ -30,8 +35,8 @@ pub fn main() !void {
         .border_style = theme.border_style,
     });
 
-    const sidebar_items = [_][]const u8{ "Chat", "Tools", "Sessions", "Config" };
-    const sidebar = try ziggy.Sidebar.build(allocator, "Navigation", &sidebar_items, .{
+    const sidebar_items = try allocator.dupe([]const u8, &[_][]const u8{ "Chat", "Tools", "Sessions", "Config" });
+    const sidebar = try ziggy.Sidebar.build(allocator, "Navigation", sidebar_items, .{
         .selected = 0,
         .focused = true,
         .style = theme.pane,
@@ -102,7 +107,5 @@ pub fn main() !void {
         .border_style = theme.border_style,
     });
 
-    const root = try ziggy.VStack.buildWithWeights(allocator, &.{ header, body, footer }, 1, &.{ 0, 1, 0 });
-
-    try support.renderStatic(root, support.detectTerminalSize());
+    return try ziggy.VStack.buildWithWeights(allocator, &.{ header, body, footer }, 1, &.{ 0, 1, 0 });
 }

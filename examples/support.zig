@@ -36,6 +36,49 @@ extern "kernel32" fn WaitForSingleObject(
     hHandle: HANDLE,
     dwMilliseconds: DWORD,
 ) callconv(.winapi) DWORD;
+extern "kernel32" fn FlushConsoleInputBuffer(
+    hConsoleInput: HANDLE,
+) callconv(.winapi) BOOL;
+extern "kernel32" fn ReadConsoleInputW(
+    hConsoleInput: HANDLE,
+    lpBuffer: [*]INPUT_RECORD,
+    nLength: DWORD,
+    lpNumberOfEventsRead: *DWORD,
+) callconv(.winapi) BOOL;
+
+const KEY_EVENT_RECORD = extern struct {
+    bKeyDown: BOOL,
+    wRepeatCount: u16,
+    wVirtualKeyCode: u16,
+    wVirtualScanCode: u16,
+    UnicodeChar: u16,
+    dwControlKeyState: DWORD,
+};
+
+const INPUT_RECORD = extern struct {
+    EventType: u16,
+    _padding: u16,
+    Event: extern union {
+        KeyEvent: KEY_EVENT_RECORD,
+        _raw: [16]u8,
+    },
+};
+
+const KEY_EVENT: u16 = 0x0001;
+
+pub fn restoreConsoleAfterFailure() void {
+    ziggy.forceRestoreConsole();
+    var buffer: [256]u8 = undefined;
+    var stderr_writer = std.fs.File.stderr().writer(&buffer);
+    const stderr = &stderr_writer.interface;
+    _ = stderr.writeAll("\x1b[?2026l\x1b[?2004l\x1b[?1006l\x1b[?1000l\x1b[?1049l\x1b[0m\r\n") catch {};
+    _ = stderr.flush() catch {};
+}
+
+pub fn panicHandler(message: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
+    restoreConsoleAfterFailure();
+    std.debug.panic("{s}", .{message});
+}
 
 pub fn detectTerminalSize() ziggy.Size {
     if (@import("builtin").os.tag == .windows) {
@@ -92,7 +135,15 @@ pub fn renderStatic(root: *const ziggy.Node, size: ziggy.Size) !void {
     var buffer: [8192]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&buffer);
     const stdout = &stdout_writer.interface;
-    try dumpScreen(stdout, &screen);
+    const output = try ziggy.renderScreenToString(allocator, &screen, .{
+        .width = size.width,
+        .height = size.height,
+        .ansi_styles = ziggy.getRenderProfile().ansi_enabled,
+        .trim_trailing_spaces = true,
+        .include_final_newline = true,
+    });
+    defer allocator.free(output);
+    try stdout.writeAll(output);
     try stdout.flush();
 }
 
@@ -162,4 +213,34 @@ pub fn runInteractiveProgram(
         const keep_running = try program.processTerminalEvent(maybe_event.?);
         if (!keep_running) break;
     }
+}
+
+pub fn clearPendingConsoleInput() void {
+    if (@import("builtin").os.tag == .windows) {
+        _ = FlushConsoleInputBuffer(std.fs.File.stdin().handle);
+    }
+}
+
+pub fn waitForAnyKey(message: []const u8) !void {
+    clearPendingConsoleInput();
+    var buffer: [512]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&buffer);
+    const stdout = &stdout_writer.interface;
+    try stdout.writeAll(message);
+    try stdout.flush();
+
+    if (@import("builtin").os.tag == .windows) {
+        var record: INPUT_RECORD = undefined;
+        var read: DWORD = 0;
+        while (true) {
+            if (ReadConsoleInputW(std.fs.File.stdin().handle, @ptrCast(&record), 1, &read) == 0 or read == 0) break;
+            if (record.EventType == KEY_EVENT and record.Event.KeyEvent.bKeyDown != 0) break;
+        }
+    } else {
+        var byte: [1]u8 = undefined;
+        _ = try std.fs.File.stdin().read(&byte);
+    }
+
+    try stdout.writeAll("\n");
+    try stdout.flush();
 }

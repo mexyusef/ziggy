@@ -7,6 +7,7 @@ const selection_model = @import("selection_model.zig");
 const style_mod = @import("../style/style.zig");
 const border_mod = @import("../style/border.zig");
 const node_mod = @import("node.zig");
+const interaction = @import("../interaction/widget.zig");
 
 pub const Item = struct {
     label: []const u8,
@@ -20,30 +21,47 @@ pub const State = struct {
     focused: bool = true,
 };
 
-pub fn handleKey(state: *State, items: []const Item, key: parser.Key) void {
-    if (!state.focused or items.len == 0) return;
-    state.cursor = selection_model.clampIndex(state.cursor, items.len);
-    if (!state.expanded) {
+pub fn handleEvent(state: *State, items: []const Item, key: parser.Key) interaction.Response {
+    if (!state.focused or items.len == 0) return .{};
+    var select: interaction.SelectState = .{
+        .open = state.expanded,
+        .cursor = state.cursor,
+        .selected = state.selected,
+        .focused = state.focused,
+    };
+    defer {
+        state.expanded = select.open;
+        state.cursor = select.cursor;
+        state.selected = select.selected;
+    }
+    select.normalize(items.len);
+    if (!select.open) {
         switch (key) {
             .enter, .down, .tab => {
-                state.expanded = true;
+                const response = select.openMenu(items.len);
                 if (selection_model.firstEnabled(Item, items)) |index| {
-                    state.cursor = if (state.selected) |selected| selection_model.clampIndex(selected, items.len) else index;
+                    select.cursor = if (state.selected) |selected| selection_model.clampIndex(selected, items.len) else index;
                 }
+                return response;
             },
-            else => {},
+            else => return .{},
         }
-        return;
     }
     switch (key) {
-        .up => selection_model.moveEnabled(Item, &state.cursor, items, .previous, false),
-        .down => selection_model.moveEnabled(Item, &state.cursor, items, .next, false),
-        .escape => state.expanded = false,
+        .up => return select.moveEnabled(Item, items, .previous),
+        .down => return select.moveEnabled(Item, items, .next),
+        .escape => return select.closeMenu(),
         .enter, .tab => {
-            if (selection_model.activateEnabled(Item, &state.selected, state.cursor, items)) state.expanded = false;
+            const response = select.activateEnabled(Item, items);
+            if (response.action == .submitted) select.open = false;
+            return response;
         },
-        else => {},
+        else => return .{},
     }
+}
+
+pub fn handleKey(state: *State, items: []const Item, key: parser.Key) void {
+    _ = handleEvent(state, items, key);
 }
 
 pub const Options = struct {
@@ -105,4 +123,14 @@ test "dropdown skips disabled options" {
     handleKey(&state, &items, .enter);
     handleKey(&state, &items, .down);
     try std.testing.expectEqual(@as(usize, 2), state.cursor);
+}
+
+test "dropdown event response reports submit" {
+    const items = [_]Item{ .{ .label = "A" }, .{ .label = "B" } };
+    var state: State = .{};
+    _ = handleEvent(&state, &items, .enter);
+    _ = handleEvent(&state, &items, .down);
+    const response = handleEvent(&state, &items, .enter);
+    try std.testing.expectEqual(interaction.Action.submitted, response.action);
+    try std.testing.expectEqual(@as(?usize, 1), response.selected);
 }

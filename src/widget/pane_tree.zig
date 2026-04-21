@@ -3,6 +3,8 @@ const screen_mod = @import("../terminal/screen.zig");
 const hstack = @import("hstack.zig");
 const vstack = @import("vstack.zig");
 const node_mod = @import("node.zig");
+const parser = @import("../terminal/parser.zig");
+const interaction = @import("../interaction/widget.zig");
 
 pub const PaneId = u32;
 
@@ -129,6 +131,35 @@ pub const State = struct {
         if (ids.items.len == 0) return;
         const current = self.indexOf(ids.items, self.focused) orelse 0;
         self.focused = ids.items[(current + ids.items.len - 1) % ids.items.len];
+    }
+
+    pub fn handleEvent(self: *State, key: parser.Key) interaction.Response {
+        switch (key) {
+            .tab, .right, .down => {
+                self.focusNext();
+                return .{ .handled = true, .redraw = true, .action = .moved };
+            },
+            .back_tab, .left, .up => {
+                self.focusPrevious();
+                return .{ .handled = true, .redraw = true, .action = .moved };
+            },
+            .char => |c| switch (c) {
+                'v', 'V' => {
+                    _ = self.splitFocused(.vertical, null) catch return .{};
+                    return .{ .handled = true, .redraw = true, .action = .changed };
+                },
+                's', 'S' => {
+                    _ = self.splitFocused(.horizontal, null) catch return .{};
+                    return .{ .handled = true, .redraw = true, .action = .changed };
+                },
+                'w', 'W' => {
+                    if (self.closePane(self.focused)) return .{ .handled = true, .redraw = true, .action = .changed };
+                    return .{};
+                },
+                else => return .{},
+            },
+            else => return .{},
+        }
     }
 
     pub fn replacePane(self: *State, target_pane_id: PaneId, replacement_pane_id: PaneId) bool {
@@ -410,4 +441,14 @@ test "pane tree snapshot roundtrip preserves structure" {
     defer restored.deinit();
     try std.testing.expectEqual(@as(usize, 3), restored.leafCount());
     try std.testing.expectEqual(state.focused, restored.focused);
+}
+
+test "pane tree handleEvent cycles and splits" {
+    var state = try State.initSingle(std.testing.allocator, 1);
+    defer state.deinit();
+    const split = state.handleEvent(.{ .char = 'v' });
+    try std.testing.expectEqual(interaction.Action.changed, split.action);
+    try std.testing.expectEqual(@as(usize, 2), state.leafCount());
+    const moved = state.handleEvent(.tab);
+    try std.testing.expectEqual(interaction.Action.moved, moved.action);
 }

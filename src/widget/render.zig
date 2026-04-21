@@ -123,6 +123,14 @@ fn renderBox(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.Nod
     const x1 = outer_x + outer_width - 1;
     const y1 = outer_y + outer_height - 1;
 
+    // Paint the full panel area so box background colors produce real themed cards.
+    fillRect(screen, .{
+        .x = outer_x,
+        .y = outer_y,
+        .width = outer_width,
+        .height = outer_height,
+    }, style);
+
     screen.setGlyph(.{ .x = x0, .y = y0 }, border.top_left, style);
     screen.setGlyph(.{ .x = x1, .y = y0 }, border.top_right, style);
     screen.setGlyph(.{ .x = x0, .y = y1 }, border.bottom_left, style);
@@ -1045,6 +1053,22 @@ test "render box respects margin" {
     defer std.testing.allocator.destroy(root);
     renderNode(&screen, .{ .x = 0, .y = 0, .width = 12, .height = 6 }, root);
     try std.testing.expectEqual(@as(u8, '+'), screen.getCell(.{ .x = 2, .y = 1 }).byte);
+}
+
+test "render box fills interior background" {
+    var screen = try screen_mod.Screen.init(std.testing.allocator, .{ .width = 12, .height = 6 });
+    defer screen.deinit();
+    const root = try node_mod.allocNode(std.testing.allocator, .{
+        .box = .{
+            .style = .{
+                .fg = .{ .ansi = 15 },
+                .bg = .{ .rgb = .{ .r = 18, .g = 52, .b = 86 } },
+            },
+        },
+    });
+    defer std.testing.allocator.destroy(root);
+    renderNode(&screen, .{ .x = 0, .y = 0, .width = 8, .height = 4 }, root);
+    try std.testing.expectEqual(root.box.style.bg.rgb.r, screen.getCell(.{ .x = 3, .y = 2 }).style.bg.rgb.r);
 }
 
 test "render text supports center alignment" {

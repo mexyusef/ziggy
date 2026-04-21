@@ -8,6 +8,12 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
+
+    const root = try buildRoot(allocator);
+    try support.renderStatic(root, support.detectTerminalSize());
+}
+
+pub fn buildRoot(allocator: std.mem.Allocator) !*const ziggy.Node {
     const theme = ziggy.defaultAgentTheme();
 
     const header = try ziggy.HeaderBar.build(allocator, "ziggy Widget Gallery", .{
@@ -20,22 +26,22 @@ pub fn main() !void {
         .border_style = theme.border_style,
     });
 
-    const menu_items = [_][]const u8{ "File", "Edit", "View", "Help" };
-    const menu = try ziggy.MenuBar.build(allocator, &menu_items, .{
+    const menu_items = try allocator.dupe([]const u8, &[_][]const u8{ "File", "Edit", "View", "Help" });
+    const menu = try ziggy.MenuBar.build(allocator, menu_items, .{
         .selected = 2,
         .style = theme.pane,
         .selected_style = theme.selected_alt,
         .border_style = theme.border_style,
     });
 
-    const breadcrumb_items = [_][]const u8{ "workspace", "examples", "widgets_demo.zig" };
-    const breadcrumb = try ziggy.Breadcrumb.build(allocator, &breadcrumb_items, .{
+    const breadcrumb_items = try allocator.dupe([]const u8, &[_][]const u8{ "workspace", "examples", "widgets_demo.zig" });
+    const breadcrumb = try ziggy.Breadcrumb.build(allocator, breadcrumb_items, .{
         .style = theme.pane,
         .current_style = theme.selected,
     });
 
-    const nav_items = [_][]const u8{ "Overview", "Dialogs", "Notifications", "Editors" };
-    const nav = try ziggy.NavBar.build(allocator, &nav_items, .{
+    const nav_items = try allocator.dupe([]const u8, &[_][]const u8{ "Overview", "Dialogs", "Notifications", "Editors" });
+    const nav = try ziggy.NavBar.build(allocator, nav_items, .{
         .selected = 1,
         .style = theme.pane,
         .selected_style = theme.selected_alt,
@@ -74,8 +80,8 @@ pub fn main() !void {
         .padding_bottom = 1,
     });
 
-    const commands = [_][]const u8{ "Open Session", "Switch Model", "Compact Context", "Review Diff" };
-    const command_dialog = try ziggy.CommandDialog.build(allocator, "Command Palette", "sw", &commands, .{
+    const commands = try allocator.dupe([]const u8, &[_][]const u8{ "Open Session", "Switch Model", "Compact Context", "Review Diff" });
+    const command_dialog = try ziggy.CommandDialog.build(allocator, "Command Palette", "sw", commands, .{
         .selected = 1,
         .cursor = 2,
         .hint = "Ctrl+P opens, arrows move, Enter selects",
@@ -84,8 +90,8 @@ pub fn main() !void {
         .box_style = theme.pane,
         .border_style = theme.border_style,
     });
-    const picker_items = [_][]const u8{ "Workspace A", "Workspace B", "Workspace C" };
-    const picker = try ziggy.PickerDialog.build(allocator, "Quick Switcher", &picker_items, .{
+    const picker_items = try allocator.dupe([]const u8, &[_][]const u8{ "Workspace A", "Workspace B", "Workspace C" });
+    const picker = try ziggy.PickerDialog.build(allocator, "Quick Switcher", picker_items, .{
         .description = "Ctrl+P style picker surface.",
         .selected = 0,
         .style = theme.pane,
@@ -118,7 +124,5 @@ pub fn main() !void {
         .right_style = theme.status_idle,
         .border_style = theme.border_style,
     });
-    const root = try ziggy.VStack.buildWithWeights(allocator, &.{ header, menu, breadcrumb, nav, body, footer }, 1, &.{ 0, 0, 0, 0, 1, 0 });
-
-    try support.renderStatic(root, support.detectTerminalSize());
+    return try ziggy.VStack.buildWithWeights(allocator, &.{ header, menu, breadcrumb, nav, body, footer }, 1, &.{ 0, 0, 0, 0, 1, 0 });
 }

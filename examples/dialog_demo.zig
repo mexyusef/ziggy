@@ -16,6 +16,11 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    const root = try buildRoot(allocator);
+    try support.renderStatic(root, support.detectTerminalSize());
+}
+
+pub fn buildRoot(allocator: std.mem.Allocator) !*const ziggy.Node {
     var router = ziggy.CommandRouter(Action).init(allocator);
     defer router.deinit();
     try router.bind(.ctrl_p, .open_palette);
@@ -32,13 +37,13 @@ pub fn main() !void {
     defer toast_manager.deinit();
     try toast_manager.push("done", "DONE", "Command palette primitives are now available in ziggy.", .success, 0, 3000);
 
-    const commands = [_][]const u8{
+    const commands = try allocator.dupe([]const u8, &[_][]const u8{
         "Open Session",
         "Switch Model",
         "Review Diff",
         "Compact Context",
         "Doctor",
-    };
+    });
 
     var down_event: ziggy.InputRuntime.KeyEvent = .{ .key = .down };
     const selected: usize = switch (router.handleKey(&down_event).?) {
@@ -46,7 +51,7 @@ pub fn main() !void {
         else => 0,
     };
 
-    const dialog = try ziggy.CommandDialog.build(allocator, "Command Palette", "sw", &commands, .{
+    const dialog = try ziggy.CommandDialog.build(allocator, "Command Palette", "sw", commands, .{
         .selected = selected,
         .cursor = 2,
         .hint = "Ctrl+P opens, arrows move, Enter selects",
@@ -76,7 +81,5 @@ pub fn main() !void {
         .label = latest_toast.label,
         .message = latest_toast.message,
     });
-    const shell = try ziggy.VStack.buildWithWeights(allocator, &.{ dialog, popup, tooltip, toast }, 1, &.{ 5, 2, 2, 2 });
-
-    try support.renderStatic(shell, support.detectTerminalSize());
+    return try ziggy.VStack.buildWithWeights(allocator, &.{ dialog, popup, tooltip, toast }, 1, &.{ 5, 2, 2, 2 });
 }

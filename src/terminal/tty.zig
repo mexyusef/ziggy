@@ -9,6 +9,15 @@ const UINT = std.os.windows.UINT;
 extern "kernel32" fn GetConsoleCP() callconv(.winapi) UINT;
 extern "kernel32" fn SetConsoleCP(code_page: UINT) callconv(.winapi) std.os.windows.BOOL;
 
+const ConsoleSnapshot = struct {
+    input_mode: ?u32 = null,
+    output_mode: ?u32 = null,
+    input_code_page: ?u32 = null,
+    output_code_page: ?u32 = null,
+};
+
+var global_console_snapshot: ConsoleSnapshot = .{};
+
 pub const Tty = struct {
     reader: ?*std.Io.Reader = null,
     writer: ?*std.Io.Writer = null,
@@ -55,6 +64,7 @@ pub const Tty = struct {
             var original: windows.DWORD = 0;
             if (windows.kernel32.GetConsoleMode(stdin_file.handle, &original) != 0) {
                 self.original_console_mode = @intCast(original);
+                global_console_snapshot.input_mode = self.original_console_mode;
                 const enable_virtual_terminal_input: windows.DWORD = 0x0200;
                 const disable_mask: windows.DWORD = 0x0001 | 0x0002 | 0x0004;
                 const requested = (original & ~disable_mask) | enable_virtual_terminal_input;
@@ -63,10 +73,13 @@ pub const Tty = struct {
             var stdout_original: windows.DWORD = 0;
             if (windows.kernel32.GetConsoleMode(stdout_file.handle, &stdout_original) != 0) {
                 self.original_output_console_mode = @intCast(stdout_original);
+                global_console_snapshot.output_mode = self.original_output_console_mode;
                 const enable_virtual_terminal_processing: windows.DWORD = 0x0004;
                 const requested = stdout_original | enable_virtual_terminal_processing;
                 _ = windows.kernel32.SetConsoleMode(stdout_file.handle, requested);
             }
+            global_console_snapshot.input_code_page = self.original_input_code_page;
+            global_console_snapshot.output_code_page = self.original_output_code_page;
         }
         if (self.writer) |writer| {
             if (self.capabilities.alternate_screen and !self.alternate_screen_active) {
@@ -128,7 +141,24 @@ pub const Tty = struct {
             if (self.original_output_console_mode) |original| {
                 _ = std.os.windows.kernel32.SetConsoleMode(std.fs.File.stdout().handle, @intCast(original));
             }
+            global_console_snapshot = .{};
         }
         self.raw_mode = false;
     }
 };
+
+pub fn forceRestoreConsole() void {
+    if (builtin.os.tag != .windows) return;
+    if (global_console_snapshot.input_code_page) |original| {
+        _ = SetConsoleCP(@intCast(original));
+    }
+    if (global_console_snapshot.output_code_page) |original| {
+        _ = std.os.windows.kernel32.SetConsoleOutputCP(@intCast(original));
+    }
+    if (global_console_snapshot.input_mode) |original| {
+        _ = std.os.windows.kernel32.SetConsoleMode(std.fs.File.stdin().handle, @intCast(original));
+    }
+    if (global_console_snapshot.output_mode) |original| {
+        _ = std.os.windows.kernel32.SetConsoleMode(std.fs.File.stdout().handle, @intCast(original));
+    }
+}

@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const profile = @import("profile.zig");
 
 const UINT = std.os.windows.UINT;
 extern "kernel32" fn SetConsoleOutputCP(code_page: UINT) callconv(.winapi) std.os.windows.BOOL;
@@ -19,6 +20,7 @@ pub fn prepareStdIo() PrepareResult {
     }
     _ = std.fs.File.stdout().getOrEnableAnsiEscapeSupport();
     result.ansi_enabled = true;
+    profile.set(profile.detect(std.heap.page_allocator, result.ansi_enabled));
     return result;
 }
 

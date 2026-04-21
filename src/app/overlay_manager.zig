@@ -1,6 +1,7 @@
 const std = @import("std");
 const overlay_mod = @import("overlay.zig");
 const surface_mod = @import("../widget/surface.zig");
+const overlay_runtime = @import("../interaction/overlay_runtime.zig");
 
 pub const Manager = struct {
     state: *overlay_mod.State,
@@ -37,6 +38,24 @@ pub const Manager = struct {
         try self.state.pushOrUpdate(id, title, .context_menu, anchor);
     }
 
+    pub fn placeAnchored(
+        self: *Manager,
+        id: []const u8,
+        title: ?[]const u8,
+        kind: overlay_mod.Kind,
+        container: surface_mod.Rect,
+        anchor: surface_mod.Rect,
+        width: u16,
+        height: u16,
+    ) !surface_mod.Rect {
+        const rect = overlay_runtime.resolvePopupRect(container, anchor, .{
+            .width = width,
+            .height = height,
+        });
+        try self.state.pushOrUpdate(id, title, kind, rect);
+        return rect;
+    }
+
     pub fn close(self: *Manager, id: []const u8) void {
         _ = self.state.pop(id);
     }
@@ -65,4 +84,13 @@ test "overlay manager updates anchored overlays" {
     try manager.openTooltip("hint", "Hint", .{ .x = 4, .y = 3, .width = 2, .height = 1 });
     try std.testing.expectEqual(@as(usize, 1), state.entries.items.len);
     try std.testing.expectEqual(@as(u16, 4), state.entries.items[0].anchor.?.x);
+}
+
+test "overlay manager places anchored popup inside container" {
+    var state = overlay_mod.State.init(std.testing.allocator);
+    defer state.deinit();
+    var manager = Manager.init(&state);
+    const rect = try manager.placeAnchored("menu", "Menu", .dropdown, .{ .x = 0, .y = 0, .width = 20, .height = 10 }, .{ .x = 18, .y = 8, .width = 2, .height = 1 }, 6, 3);
+    try std.testing.expectEqual(@as(u16, 14), rect.x);
+    try std.testing.expect(state.isVisible("menu"));
 }

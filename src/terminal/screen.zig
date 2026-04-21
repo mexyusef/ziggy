@@ -1,5 +1,6 @@
 const std = @import("std");
 const style_mod = @import("../style/style.zig");
+const profile = @import("profile.zig");
 
 pub const Size = struct {
     width: u16,
@@ -88,10 +89,11 @@ pub const Screen = struct {
     }
 
     pub fn setGlyphWithLink(self: *Screen, point: Point, glyph: []const u8, style: style_mod.Style, link_target: ?[]const u8) void {
-        if (point.x >= self.size.width or point.y >= self.size.height or glyph.len == 0 or glyph.len > 4) return;
-        const width = glyphDisplayWidth(glyph);
+        const safe_glyph = glyphForTerminal(glyph);
+        if (point.x >= self.size.width or point.y >= self.size.height or safe_glyph.len == 0 or safe_glyph.len > 4) return;
+        const width = glyphDisplayWidth(safe_glyph);
         var glyph_bytes: [4]u8 = .{ 0, 0, 0, 0 };
-        for (glyph, 0..) |byte, index| glyph_bytes[index] = byte;
+        for (safe_glyph, 0..) |byte, index| glyph_bytes[index] = byte;
         var link_bytes: [96]u8 = .{0} ** 96;
         const link_len: u8 = if (link_target) |target|
             @intCast(@min(target.len, link_bytes.len))
@@ -101,8 +103,8 @@ pub const Screen = struct {
             @memcpy(link_bytes[0..link_len], target[0..link_len]);
         }
         self.cells[indexOf(self.size, point)] = .{
-            .byte = glyph[0],
-            .glyph_len = @intCast(glyph.len),
+            .byte = safe_glyph[0],
+            .glyph_len = @intCast(safe_glyph.len),
             .glyph_bytes = glyph_bytes,
             .display_width = width,
             .continuation = false,
@@ -174,6 +176,31 @@ fn glyphDisplayWidth(glyph: []const u8) u8 {
     return codepointWidth(cp);
 }
 
+fn glyphForTerminal(glyph: []const u8) []const u8 {
+    if (profile.get().unicode_safe) return glyph;
+    return asciiFallbackGlyph(glyph);
+}
+
+fn asciiFallbackGlyph(glyph: []const u8) []const u8 {
+    if (glyph.len == 0) return glyph;
+    if (std.unicode.Utf8View.init(glyph)) |view| {
+        var iter = view.iterator();
+        const cp = iter.nextCodepoint() orelse return "?";
+        if (iter.nextCodepoint() != null) return "?";
+        return switch (cp) {
+            '┌', '┐', '└', '┘', '╔', '╗', '╚', '╝', '╭', '╮', '╰', '╯', '┏', '┓', '┗', '┛' => "+",
+            '─', '═', '━' => "-",
+            '│', '║', '┃' => "|",
+            '█' => "#",
+            '░' => "-",
+            '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' => "*",
+            else => if (cp <= 0x7f) glyph else "?",
+        };
+    } else |_| {
+        return "?";
+    }
+}
+
 fn codepointWidth(codepoint: u21) u8 {
     if ((codepoint >= 0x1100 and codepoint <= 0x115F) or
         (codepoint >= 0x2329 and codepoint <= 0x232A) or
@@ -228,4 +255,23 @@ test "screen stores link metadata" {
     screen.writeLinkedText(.{ .x = 0, .y = 0 }, "hi", .{}, "https://x");
     const cell = screen.getCell(.{ .x = 0, .y = 0 });
     try std.testing.expectEqualStrings("https://x", cell.linkTarget().?);
+}
+
+test "screen falls back to ascii glyphs when unicode is unsafe" {
+    const saved = profile.get();
+    defer profile.set(saved);
+    profile.set(.{ .ansi_enabled = false, .unicode_safe = false });
+
+    var screen = try Screen.init(std.testing.allocator, .{ .width = 4, .height = 1 });
+    defer screen.deinit();
+
+    screen.setGlyph(.{ .x = 0, .y = 0 }, "┌", .{});
+    screen.setGlyph(.{ .x = 1, .y = 0 }, "█", .{});
+    screen.setGlyph(.{ .x = 2, .y = 0 }, "⠋", .{});
+    screen.setGlyph(.{ .x = 3, .y = 0 }, "é", .{});
+
+    try std.testing.expectEqualStrings("+", screen.getCell(.{ .x = 0, .y = 0 }).glyph_bytes[0..screen.getCell(.{ .x = 0, .y = 0 }).glyph_len]);
+    try std.testing.expectEqualStrings("#", screen.getCell(.{ .x = 1, .y = 0 }).glyph_bytes[0..screen.getCell(.{ .x = 1, .y = 0 }).glyph_len]);
+    try std.testing.expectEqualStrings("*", screen.getCell(.{ .x = 2, .y = 0 }).glyph_bytes[0..screen.getCell(.{ .x = 2, .y = 0 }).glyph_len]);
+    try std.testing.expectEqualStrings("?", screen.getCell(.{ .x = 3, .y = 0 }).glyph_bytes[0..screen.getCell(.{ .x = 3, .y = 0 }).glyph_len]);
 }

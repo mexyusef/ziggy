@@ -14,10 +14,9 @@ const commands = [_][]const u8{
 const Msg = ziggy.Event;
 
 const Model = struct {
-    editor: ziggy.Editor,
-    selected: usize = 0,
+    palette: ziggy.CommandDialog.State,
     palette_open: bool = true,
-    notice: []const u8 = "Ctrl+P opens palette, Up/Down move, Enter accepts, Esc quits",
+    notice: []const u8 = "Ctrl+P opens palette. j/k or arrows move. Enter accepts. Esc quits.",
 
     pub fn init(self: *@This(), ctx: *ziggy.Context) ziggy.Command(Msg) {
         _ = self;
@@ -33,34 +32,52 @@ const Model = struct {
                     self.palette_open = true;
                     ctx.requestRedraw();
                 },
-                .up => {
-                    if (self.palette_open and self.selected > 0) {
-                        self.selected -= 1;
-                        ctx.requestRedraw();
-                    }
-                },
-                .down => {
-                    if (self.palette_open and self.selected + 1 < commands.len) {
-                        self.selected += 1;
+                .up, .down, .page_up, .page_down, .home, .end => {
+                    if (self.palette_open) {
+                        _ = self.palette.handleEvent(ctx.persistent_allocator, &commands, key) catch .{};
                         ctx.requestRedraw();
                     }
                 },
                 .enter => {
                     if (self.palette_open) {
-                        self.notice = commands[self.selected];
-                        self.palette_open = false;
-                        ctx.requestRedraw();
+                        const response = self.palette.handleEvent(ctx.persistent_allocator, &commands, .enter) catch return .none;
+                        if (response.action == .submitted) {
+                            if (response.selected) |selected| {
+                                self.notice = commands[selected];
+                                self.palette_open = false;
+                                ctx.requestRedraw();
+                            }
+                        }
                     }
                 },
                 .backspace => {
-                    self.editor.backspace(ctx.persistent_allocator) catch {};
+                    _ = self.palette.query.handleEvent(ctx.persistent_allocator, .backspace) catch .{};
                     self.palette_open = true;
                     ctx.requestRedraw();
                 },
                 .char => |c| {
-                    self.editor.insertChar(ctx.persistent_allocator, c) catch {};
-                    self.palette_open = true;
-                    self.selected = 0;
+                    switch (c) {
+                        'j', 'J' => {
+                            if (self.palette_open) {
+                                _ = self.palette.handleEvent(ctx.persistent_allocator, &commands, .down) catch .{};
+                            } else {
+                                _ = self.palette.query.handleEvent(ctx.persistent_allocator, .{ .char = c }) catch .{};
+                                self.palette_open = true;
+                            }
+                        },
+                        'k', 'K' => {
+                            if (self.palette_open) {
+                                _ = self.palette.handleEvent(ctx.persistent_allocator, &commands, .up) catch .{};
+                            } else {
+                                _ = self.palette.query.handleEvent(ctx.persistent_allocator, .{ .char = c }) catch .{};
+                                self.palette_open = true;
+                            }
+                        },
+                        else => {
+                            _ = self.palette.query.handleEvent(ctx.persistent_allocator, .{ .char = c }) catch .{};
+                            self.palette_open = true;
+                        },
+                    }
                     ctx.requestRedraw();
                 },
                 else => {},
@@ -85,8 +102,8 @@ const Model = struct {
         const query_input = try ziggy.Input.build(
             ctx.allocator,
             "> ",
-            try ctx.allocator.dupe(u8, self.editor.value),
-            self.editor.cursor,
+            try ctx.allocator.dupe(u8, self.palette.query.editor.value),
+            self.palette.query.editor.cursor,
             true,
             theme.pane,
         );
@@ -98,10 +115,10 @@ const Model = struct {
         });
 
         const body = if (self.palette_open) blk: {
-            break :blk try ziggy.CommandDialog.build(ctx.allocator, "Command Palette", self.editor.value, &commands, .{
-                .selected = self.selected,
-                .cursor = self.editor.cursor,
-                .hint = "Type to filter later; arrows move; Enter selects",
+            break :blk try ziggy.CommandDialog.build(ctx.allocator, "Command Palette", self.palette.query.editor.value, &commands, .{
+                .selected = self.palette.results.cursor,
+                .cursor = self.palette.query.editor.cursor,
+                .hint = "Type to edit query. j/k and arrows move. Enter selects.",
                 .style = theme.pane,
                 .selected_style = theme.selected,
                 .box_style = theme.pane,
@@ -137,8 +154,9 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const editor = try ziggy.Editor.init(allocator, "");
-    const model: Model = .{ .editor = editor };
+    var palette = try ziggy.CommandDialog.State.init(allocator, "");
+    defer palette.deinit(allocator);
+    const model: Model = .{ .palette = palette };
     try support.runInteractiveProgram(Model, Msg, allocator, model, .{
         .title = "ziggy interactive demo",
         .tick_interval_ms = 0,

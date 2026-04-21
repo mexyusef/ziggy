@@ -116,6 +116,29 @@ pub fn build(b: *std.Build) void {
     text_buffer_demo.root_module.addImport("ziggy", mod);
     b.installArtifact(text_buffer_demo);
 
+    const render_to_string_demo = b.addExecutable(.{
+        .name = "ziggy-render-to-string-demo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/render_to_string_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    render_to_string_demo.root_module.addImport("ziggy", mod);
+    b.installArtifact(render_to_string_demo);
+
+    const unified_demo = b.addExecutable(.{
+        .name = "ziggy-unified-demo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/unified_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    unified_demo.root_module.addImport("ziggy", mod);
+    b.installArtifact(unified_demo);
+    const install_unified_demo = b.addInstallArtifact(unified_demo, .{});
+
     const tests = b.addTest(.{
         .root_module = mod,
     });
@@ -159,4 +182,15 @@ pub fn build(b: *std.Build) void {
     const run_text_buffer_demo = b.addRunArtifact(text_buffer_demo);
     const text_buffer_demo_step = b.step("example-text-buffer", "Run the text buffer history demo");
     text_buffer_demo_step.dependOn(&run_text_buffer_demo.step);
+
+    const run_render_to_string_demo = b.addRunArtifact(render_to_string_demo);
+    const render_to_string_demo_step = b.step("example-render-to-string", "Run the non-interactive themed render demo");
+    render_to_string_demo_step.dependOn(&run_render_to_string_demo.step);
+
+    const run_unified_demo = b.addRunArtifact(unified_demo);
+    const unified_demo_step = b.step("example-all", "Run the unified demo gallery");
+    unified_demo_step.dependOn(&run_unified_demo.step);
+
+    const unified_demo_build_step = b.step("example-all-build", "Build and install the unified demo binary");
+    unified_demo_build_step.dependOn(&install_unified_demo.step);
 }

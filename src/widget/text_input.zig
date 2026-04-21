@@ -6,6 +6,7 @@ const autocomplete_popup = @import("autocomplete_popup.zig");
 const completion = @import("completion.zig");
 const node_mod = @import("node.zig");
 const style_mod = @import("../style/style.zig");
+const interaction = @import("../interaction/widget.zig");
 
 pub const State = struct {
     editor: editor_mod.Editor,
@@ -30,6 +31,10 @@ pub const State = struct {
     }
 
     pub fn handleKey(self: *State, allocator: std.mem.Allocator, key: parser.Key) !void {
+        _ = try self.handleEvent(allocator, key);
+    }
+
+    pub fn handleEvent(self: *State, allocator: std.mem.Allocator, key: parser.Key) !interaction.Response {
         switch (key) {
             .char => |c| try self.editor.insertChar(allocator, c),
             .backspace => try self.editor.backspace(allocator),
@@ -55,8 +60,10 @@ pub const State = struct {
             .up, .ctrl_p => self.completion_state.selectPrevious(),
             .down, .ctrl_n => self.completion_state.selectNext(),
             .escape => self.completion_state.visible = false,
-            else => {},
+            .enter => return .{ .handled = true, .redraw = true, .action = .submitted },
+            else => return .{},
         }
+        return .{ .handled = true, .redraw = true, .action = .changed };
     }
 
     pub fn buildNode(self: *const State, allocator: std.mem.Allocator) !*const node_mod.Node {
@@ -81,4 +88,13 @@ test "text input supports shift selection" {
     state.editor.moveEnd();
     try state.handleKey(std.testing.allocator, .shift_left);
     try std.testing.expect(state.editor.hasSelection());
+}
+
+test "text input event reports changes and submit" {
+    var state = try State.init(std.testing.allocator, "");
+    defer state.deinit(std.testing.allocator);
+    const changed = try state.handleEvent(std.testing.allocator, .{ .char = 'z' });
+    try std.testing.expectEqual(interaction.Action.changed, changed.action);
+    const submitted = try state.handleEvent(std.testing.allocator, .enter);
+    try std.testing.expectEqual(interaction.Action.submitted, submitted.action);
 }
