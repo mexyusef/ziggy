@@ -177,8 +177,47 @@ fn glyphDisplayWidth(glyph: []const u8) u8 {
 }
 
 fn glyphForTerminal(glyph: []const u8) []const u8 {
-    if (profile.get().unicode_safe) return glyph;
+    const active = profile.get();
+    if (!needsUnicodeFallback(glyph)) return glyph;
+    if (isIconGlyph(glyph)) {
+        if (active.iconEnabled()) return glyph;
+        return asciiFallbackGlyph(glyph);
+    }
+    if (active.unicodeEnabled()) return glyph;
     return asciiFallbackGlyph(glyph);
+}
+
+fn needsUnicodeFallback(glyph: []const u8) bool {
+    if (glyph.len == 0) return false;
+    if (std.unicode.Utf8View.init(glyph)) |view| {
+        var iter = view.iterator();
+        while (iter.nextCodepoint()) |cp| {
+            if (cp > 0x7f) return true;
+        }
+    } else |_| {
+        return true;
+    }
+    return false;
+}
+
+fn isIconGlyph(glyph: []const u8) bool {
+    if (glyph.len == 0) return false;
+    if (std.unicode.Utf8View.init(glyph)) |view| {
+        var iter = view.iterator();
+        const cp = iter.nextCodepoint() orelse return false;
+        if (iter.nextCodepoint() != null) return false;
+        return switch (cp) {
+            '┌', '┐', '└', '┘', '╔', '╗', '╚', '╝', '╭', '╮', '╰', '╯', '┏', '┓', '┗', '┛',
+            '─', '═', '━',
+            '│', '║', '┃',
+            '█', '░',
+            '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏',
+            => true,
+            else => false,
+        };
+    } else |_| {
+        return false;
+    }
 }
 
 fn asciiFallbackGlyph(glyph: []const u8) []const u8 {
@@ -191,6 +230,8 @@ fn asciiFallbackGlyph(glyph: []const u8) []const u8 {
             '┌', '┐', '└', '┘', '╔', '╗', '╚', '╝', '╭', '╮', '╰', '╯', '┏', '┓', '┗', '┛' => "+",
             '─', '═', '━' => "-",
             '│', '║', '┃' => "|",
+            '▶' => ">",
+            '▼' => "v",
             '█' => "#",
             '░' => "-",
             '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' => "*",
@@ -260,7 +301,7 @@ test "screen stores link metadata" {
 test "screen falls back to ascii glyphs when unicode is unsafe" {
     const saved = profile.get();
     defer profile.set(saved);
-    profile.set(.{ .ansi_enabled = false, .unicode_safe = false });
+    profile.set(.{ .ansi_enabled = false, .unicode_safe = false, .icon_safe = false });
 
     var screen = try Screen.init(std.testing.allocator, .{ .width = 4, .height = 1 });
     defer screen.deinit();
@@ -274,4 +315,43 @@ test "screen falls back to ascii glyphs when unicode is unsafe" {
     try std.testing.expectEqualStrings("#", screen.getCell(.{ .x = 1, .y = 0 }).glyph_bytes[0..screen.getCell(.{ .x = 1, .y = 0 }).glyph_len]);
     try std.testing.expectEqualStrings("*", screen.getCell(.{ .x = 2, .y = 0 }).glyph_bytes[0..screen.getCell(.{ .x = 2, .y = 0 }).glyph_len]);
     try std.testing.expectEqualStrings("?", screen.getCell(.{ .x = 3, .y = 0 }).glyph_bytes[0..screen.getCell(.{ .x = 3, .y = 0 }).glyph_len]);
+}
+
+test "screen honors unicode render mode separately from icon mode" {
+    const saved = profile.get();
+    defer profile.set(saved);
+    profile.set(.{
+        .ansi_enabled = false,
+        .unicode_safe = false,
+        .icon_safe = false,
+        .render_mode = .unicode_force,
+        .icon_mode = .ascii,
+    });
+
+    var screen = try Screen.init(std.testing.allocator, .{ .width = 3, .height = 1 });
+    defer screen.deinit();
+
+    screen.setGlyph(.{ .x = 0, .y = 0 }, "é", .{});
+    screen.setGlyph(.{ .x = 1, .y = 0 }, "┌", .{});
+
+    try std.testing.expectEqualStrings("é", screen.getCell(.{ .x = 0, .y = 0 }).glyph_bytes[0..screen.getCell(.{ .x = 0, .y = 0 }).glyph_len]);
+    try std.testing.expectEqualStrings("+", screen.getCell(.{ .x = 1, .y = 0 }).glyph_bytes[0..screen.getCell(.{ .x = 1, .y = 0 }).glyph_len]);
+}
+
+test "screen honors forced unicode icon mode" {
+    const saved = profile.get();
+    defer profile.set(saved);
+    profile.set(.{
+        .ansi_enabled = false,
+        .unicode_safe = false,
+        .icon_safe = false,
+        .render_mode = .unicode_force,
+        .icon_mode = .unicode,
+    });
+
+    var screen = try Screen.init(std.testing.allocator, .{ .width = 2, .height = 1 });
+    defer screen.deinit();
+
+    screen.setGlyph(.{ .x = 0, .y = 0 }, "┌", .{});
+    try std.testing.expectEqualStrings("┌", screen.getCell(.{ .x = 0, .y = 0 }).glyph_bytes[0..screen.getCell(.{ .x = 0, .y = 0 }).glyph_len]);
 }

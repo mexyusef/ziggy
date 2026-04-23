@@ -25,6 +25,8 @@ pub fn prepareStdIo() PrepareResult {
 }
 
 test "prepare result reports ansi enabled" {
+    const saved = profile.get();
+    defer profile.set(saved);
     const result = prepareStdIo();
     try std.testing.expect(result.ansi_enabled);
 }

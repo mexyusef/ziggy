@@ -29,7 +29,9 @@ pub fn build(
     options: Options,
 ) !*const node_mod.Node {
     const owned_items = try allocator.alloc([]const u8, items.len);
-    @memcpy(owned_items, items);
+    for (items, 0..) |item, index| {
+        owned_items[index] = try allocator.dupe(u8, item);
+    }
     return try node_mod.allocNode(allocator, .{
         .list = .{
             .items = owned_items,
@@ -80,6 +82,7 @@ test "list build owns the item slice" {
     const node = try build(std.testing.allocator, labels, .{});
     defer std.testing.allocator.destroy(@constCast(node));
     defer std.testing.allocator.free(node.list.items);
+    defer for (node.list.items) |item| std.testing.allocator.free(item);
 
     try std.testing.expect(node.* == .list);
     try std.testing.expect(@intFromPtr(node.list.items.ptr) != @intFromPtr(labels.ptr));

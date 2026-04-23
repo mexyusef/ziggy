@@ -348,6 +348,7 @@ test "followCursor updates viewport offsets" {
 test "wrapped cursor mapping follows visual rows" {
     var editor = try editor_mod.Editor.init(std.testing.allocator, "abcdefghij");
     defer editor.deinit(std.testing.allocator);
+    editor.cursor = 0;
 
     const wrapped = followCursorWrapped(&editor, "", .{ .width = 4, .height = 2, .scroll_margin = 0 });
     try std.testing.expectEqual(@as(usize, 0), wrapped.offset_line);

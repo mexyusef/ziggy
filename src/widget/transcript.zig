@@ -187,7 +187,7 @@ fn separatorLine(
     defer buf.deinit(allocator);
     var index: usize = 0;
     while (index < separator_width) : (index += 1) {
-        try buf.appendSlice(allocator, "-");
+        try buf.appendSlice(allocator, "─");
     }
     const text = try buf.toOwnedSlice(allocator);
     defer allocator.free(text);

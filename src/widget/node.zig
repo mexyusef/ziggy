@@ -234,6 +234,7 @@ pub const Node = union(enum) {
         child: ?*const Node = null,
         style: style_mod.Style = .{},
         border_style: border_mod.BorderStyle = .double,
+        padding: u16 = 1,
     };
 
     pub const HorizontalAlign = enum {

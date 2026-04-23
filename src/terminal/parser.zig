@@ -118,6 +118,12 @@ pub fn parseOne(bytes: []const u8) ?ParseResult {
     if (bytes[0] == '\r' or bytes[0] == '\n') return .{ .event = .{ .key = .enter }, .consumed = 1 };
     if (bytes[0] == 127 or bytes[0] == 8) return .{ .event = .{ .key = .backspace }, .consumed = 1 };
     if (bytes[0] == 0x1b) {
+        if (bytes.len >= 3 and bytes[1] == 'O') {
+            return switch (bytes[2]) {
+                'P' => .{ .event = .{ .key = .f1 }, .consumed = 3 },
+                else => .{ .event = .{ .key = .escape }, .consumed = 1 },
+            };
+        }
         if (bytes.len >= 2 and bytes[1] != '[') {
             return switch (bytes[1]) {
                 'b', 'B' => .{ .event = .{ .key = .word_left }, .consumed = 2 },

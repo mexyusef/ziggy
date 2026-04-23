@@ -288,12 +288,18 @@ fn renderStatusBar(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_m
 }
 
 fn renderInput(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.Node.InputData) void {
+    const cursor_style: style_mod.Style = .{
+        .fg = .{ .rgb = .{ .r = 20, .g = 24, .b = 32 } },
+        .bg = .{ .rgb = .{ .r = 250, .g = 204, .b = 21 } },
+        .bold = true,
+    };
     renderTextArea(screen, rect, .{
         .prompt = data.prompt,
         .value = data.value,
         .cursor = data.cursor,
         .focused = data.focused,
         .style = data.style,
+        .selection_style = cursor_style,
         .focus = data.focus,
     });
 }
@@ -378,6 +384,13 @@ fn renderTextArea(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mo
             line_style,
             data.selection_style,
             lineSelectionRange(data, line_index, prefix_len),
+            if (cursor_on_line) |col|
+                if (col >= data.offset_column and data.focused)
+                    @min(prefix_len + (col - data.offset_column), @min(total, width) -| 1)
+                else
+                    null
+            else
+                null,
         );
         draw_row += 1;
     }
@@ -397,7 +410,7 @@ fn renderTextArea(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mo
             line_buf[total] = '_';
             total += 1;
         }
-        renderTextAreaLine(screen, .{ .x = rect.x, .y = rect.y }, width, line_buf[0..@min(total, width)], data.style, data.selection_style, null);
+        renderTextAreaLine(screen, .{ .x = rect.x, .y = rect.y }, width, line_buf[0..@min(total, width)], data.style, data.selection_style, null, if (data.focused) total -| 1 else null);
     }
 }
 
@@ -409,6 +422,7 @@ fn renderTextAreaLine(
     style: style_mod.Style,
     selection_style: style_mod.Style,
     selection: ?SelectionRange,
+    cursor_index: ?usize,
 ) void {
     var fill_index: usize = 0;
     while (fill_index < width) : (fill_index += 1) {
@@ -417,7 +431,12 @@ fn renderTextAreaLine(
     var index: usize = 0;
     while (index < text.len) : (index += 1) {
         const active = if (selection) |range| index >= range.start and index < range.end else false;
-        screen.setCell(.{ .x = origin.x + @as(u16, @intCast(index)), .y = origin.y }, text[index], if (active) selection_style else style);
+        const cursor_active = cursor_index != null and index == cursor_index.?;
+        screen.setCell(
+            .{ .x = origin.x + @as(u16, @intCast(index)), .y = origin.y },
+            text[index],
+            if (active or cursor_active) selection_style else style,
+        );
     }
 }
 
@@ -486,6 +505,13 @@ fn renderWrappedTextArea(
                     line_style,
                     data.selection_style,
                     null,
+                    if (cursor_on_line) |col|
+                        if (col >= start and col <= chunk_end and data.focused)
+                            @min(active_prefix_len + (col - start), @min(total, width) -| 1)
+                        else
+                            null
+                    else
+                        null,
                 );
                 draw_row += 1;
             }
@@ -509,7 +535,7 @@ fn renderWrappedTextArea(
             line_buf[total] = '_';
             total += 1;
         }
-        renderTextAreaLine(screen, .{ .x = rect.x, .y = rect.y }, width, line_buf[0..@min(total, width)], data.style, data.selection_style, null);
+        renderTextAreaLine(screen, .{ .x = rect.x, .y = rect.y }, width, line_buf[0..@min(total, width)], data.style, data.selection_style, null, if (data.focused) total -| 1 else null);
     }
 }
 
@@ -677,10 +703,17 @@ fn renderTruncatedLine(
 }
 
 fn renderModal(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.Node.ModalData) void {
-    const width: u16 = @min(rect.width -| 4, 80);
-    const height: u16 = @min(rect.height -| 4, @max(rect.height * 2 / 3, 10));
+    if (rect.width < 12 or rect.height < 8) return;
+
+    const max_width = @max(rect.width -| 6, @as(u16, 8));
+    const max_height = @max(rect.height -| 4, @as(u16, 6));
+    const desired_width: u16 = @intCast((@as(u32, rect.width) * 3) / 4);
+    const desired_height: u16 = @intCast((@as(u32, rect.height) * 3) / 4);
+    const width: u16 = @min(max_width, @max(@min(max_width, @as(u16, 56)), desired_width));
+    const height: u16 = @min(max_height, @max(@min(max_height, @as(u16, 14)), desired_height));
     const x: u16 = rect.x + (rect.width -| width) / 2;
-    const y: u16 = rect.y + (rect.height -| height) / 2;
+    const y_space = rect.height -| height;
+    const y: u16 = rect.y + @max(y_space / 3, 1);
     const body = if (data.child) |child|
         child
     else if (data.body) |text|
@@ -695,10 +728,10 @@ fn renderModal(screen: *screen_mod.Screen, rect: rect_mod.Rect, data: node_mod.N
             .title = data.title,
             .style = data.style,
             .border_style = data.border_style,
-            .padding_top = 1,
-            .padding_bottom = 1,
-            .padding_left = 2,
-            .padding_right = 2,
+            .padding_top = data.padding,
+            .padding_bottom = data.padding,
+            .padding_left = data.padding,
+            .padding_right = data.padding,
             .child = body,
         },
     }) catch return;
@@ -1308,6 +1341,29 @@ test "render input supports multiline content" {
     try std.testing.expectEqual(@as(u8, 'o'), screen.getCell(.{ .x = 2, .y = 0 }).byte);
     try std.testing.expectEqual(@as(u8, ' '), screen.getCell(.{ .x = 0, .y = 1 }).byte);
     try std.testing.expectEqual(@as(u8, 't'), screen.getCell(.{ .x = 2, .y = 1 }).byte);
+}
+
+test "render input highlights mid-line cursor position" {
+    var screen = try screen_mod.Screen.init(std.testing.allocator, .{ .width = 12, .height = 1 });
+    defer screen.deinit();
+
+    const node = node_mod.Node{
+        .input = .{
+            .prompt = "> ",
+            .value = "abcdef",
+            .cursor = 3,
+            .focused = true,
+            .style = .{},
+        },
+    };
+    renderNode(&screen, .{ .x = 0, .y = 0, .width = 12, .height = 1 }, &node);
+
+    const cursor_cell = screen.getCell(.{ .x = 5, .y = 0 });
+    try std.testing.expectEqual(@as(u8, 'd'), cursor_cell.glyph_bytes[0]);
+    try std.testing.expect(cursor_cell.style.bold);
+    try std.testing.expectEqual(@as(u8, 250), cursor_cell.style.bg.rgb.r);
+    try std.testing.expectEqual(@as(u8, 204), cursor_cell.style.bg.rgb.g);
+    try std.testing.expectEqual(@as(u8, 21), cursor_cell.style.bg.rgb.b);
 }
 
 test "render text area shows placeholder when empty" {

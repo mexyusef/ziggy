@@ -90,6 +90,7 @@ pub const Tty = struct {
                 ansi.writeClearScreen(writer) catch {};
                 self.alternate_screen_active = true;
             }
+            ansi.writeHideCursor(writer) catch {};
             if (self.capabilities.mouse) {
                 ansi.writeEnableMouse(writer) catch {};
             }
@@ -107,6 +108,7 @@ pub const Tty = struct {
             if (self.capabilities.alternate_screen and self.alternate_screen_active) {
                 ansi.writeEnterAlternateScreen(writer) catch {};
             }
+            ansi.writeHideCursor(writer) catch {};
             if (self.capabilities.mouse) {
                 ansi.writeEnableMouse(writer) catch {};
             }
@@ -119,6 +121,7 @@ pub const Tty = struct {
 
     pub fn leaveRawMode(self: *Tty) void {
         if (self.writer) |writer| {
+            ansi.writeShowCursor(writer) catch {};
             if (self.capabilities.bracketed_paste) {
                 ansi.writeDisableBracketedPaste(writer) catch {};
             }

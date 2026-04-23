@@ -31,6 +31,7 @@ pub fn buildWithOptions(
             .child = null,
             .style = options.style,
             .border_style = options.border_style,
+            .padding = options.padding,
         },
     });
 }
@@ -57,6 +58,7 @@ pub fn buildNodeWithOptions(
             .child = child,
             .style = options.style,
             .border_style = options.border_style,
+            .padding = options.padding,
         },
     });
 }

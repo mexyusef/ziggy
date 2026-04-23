@@ -38,6 +38,14 @@ pub fn writeLeaveAlternateScreen(writer: *std.Io.Writer) !void {
     try writer.writeAll("\x1b[?1049l");
 }
 
+pub fn writeHideCursor(writer: *std.Io.Writer) !void {
+    try writer.writeAll("\x1b[?25l");
+}
+
+pub fn writeShowCursor(writer: *std.Io.Writer) !void {
+    try writer.writeAll("\x1b[?25h");
+}
+
 pub fn writeSetTitle(writer: *std.Io.Writer, title: []const u8) !void {
     try writer.print("\x1b]0;{s}\x1b\\", .{title});
 }
@@ -66,11 +74,15 @@ test "ansi emits title and tab status sequences" {
     try writeSetTitle(&out.writer, "ziggy");
     try writeTabStatus(&out.writer, .busy);
     try writeClearTabStatus(&out.writer);
+    try writeHideCursor(&out.writer);
+    try writeShowCursor(&out.writer);
 
     const written = out.written();
     try std.testing.expect(std.mem.indexOf(u8, written, "\x1b]0;ziggy\x1b\\") != null);
     try std.testing.expect(std.mem.indexOf(u8, written, "\x1b]21337;indicator=#ff9500;status=Working;statusColor=#ff9500\x1b\\") != null);
     try std.testing.expect(std.mem.indexOf(u8, written, "\x1b]21337;indicator=;status=;statusColor=\x1b\\") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "\x1b[?25l") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "\x1b[?25h") != null);
 }
 
 pub fn writeHyperlinkOpen(writer: *std.Io.Writer, target: []const u8) !void {

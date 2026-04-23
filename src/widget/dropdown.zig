@@ -17,6 +17,7 @@ pub const Item = struct {
 pub const State = struct {
     expanded: bool = false,
     cursor: usize = 0,
+    offset: usize = 0,
     selected: ?usize = null,
     focused: bool = true,
 };
@@ -33,6 +34,7 @@ pub fn handleEvent(state: *State, items: []const Item, key: parser.Key) interact
         state.expanded = select.open;
         state.cursor = select.cursor;
         state.selected = select.selected;
+        state.offset = selection_model.windowOffset(state.cursor, items.len, 5, state.offset);
     }
     select.normalize(items.len);
     if (!select.open) {
@@ -71,6 +73,7 @@ pub const Options = struct {
     selected_style: style_mod.Style = .{ .bold = true },
     disabled_style: style_mod.Style = .{ .dim = true },
     border_style: border_mod.BorderStyle = .single,
+    max_visible_items: usize = 5,
 };
 
 pub fn build(allocator: std.mem.Allocator, items: []const Item, state: State, options: Options) !*const node_mod.Node {
@@ -89,11 +92,14 @@ pub fn build(allocator: std.mem.Allocator, items: []const Item, state: State, op
             .padding_bottom = 1,
         });
     }
-    const rows = try allocator.alloc(*const node_mod.Node, items.len + 1);
+    const visible_items = @min(options.max_visible_items, items.len);
+    const offset = selection_model.windowOffset(state.cursor, items.len, visible_items, state.offset);
+    const rows = try allocator.alloc(*const node_mod.Node, visible_items + 1);
     rows[0] = trigger;
-    for (items, 0..) |item, index| {
+    for (items[offset .. offset + visible_items], 0..) |item, visible_index| {
+        const index = offset + visible_index;
         const prefix = if (index == state.cursor) "> " else "  ";
-        rows[index + 1] = try text.buildWithOptions(allocator, try std.fmt.allocPrint(allocator, "{s}{s}", .{ prefix, item.label }), .{
+        rows[visible_index + 1] = try text.buildWithOptions(allocator, try std.fmt.allocPrint(allocator, "{s}{s}", .{ prefix, item.label }), .{
             .style = if (!item.enabled) options.disabled_style else if (index == state.cursor) options.selected_style else options.style,
             .wrap = .truncate_end,
         });
@@ -133,4 +139,24 @@ test "dropdown event response reports submit" {
     const response = handleEvent(&state, &items, .enter);
     try std.testing.expectEqual(interaction.Action.submitted, response.action);
     try std.testing.expectEqual(@as(?usize, 1), response.selected);
+}
+
+test "dropdown keeps cursor window visible" {
+    const items = [_]Item{
+        .{ .label = "A" },
+        .{ .label = "B" },
+        .{ .label = "C" },
+        .{ .label = "D" },
+        .{ .label = "E" },
+        .{ .label = "F" },
+    };
+    var state: State = .{};
+    _ = handleEvent(&state, &items, .enter);
+    _ = handleEvent(&state, &items, .down);
+    _ = handleEvent(&state, &items, .down);
+    _ = handleEvent(&state, &items, .down);
+    _ = handleEvent(&state, &items, .down);
+    _ = handleEvent(&state, &items, .down);
+    try std.testing.expectEqual(@as(usize, 5), state.cursor);
+    try std.testing.expect(state.offset > 0);
 }
